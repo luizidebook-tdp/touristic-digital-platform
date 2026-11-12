@@ -790,3 +790,46 @@ test("session recovery paths belong only to auth and do not claim adjacent files
     );
   }
 });
+
+test("local assistant profile ownership adds only two exact map paths", () => {
+  const canonical = JSON.parse(readFileSync(".morro/ownership.json", "utf8"));
+  const paths = [
+    "packages/assistant/src/user-profile.ts",
+    "packages/assistant/src/user-profile.test.ts",
+  ];
+  const owners = (file, registry) =>
+    registry.domains
+      .filter((domain) =>
+        domain.pathPrefixes.some((prefix) =>
+          prefix.endsWith("/") ? file.startsWith(prefix) : file === prefix,
+        ),
+      )
+      .map((domain) => domain.id);
+  const before = structuredClone(canonical);
+  const map = before.domains.find((domain) => domain.id === "map");
+  map.pathPrefixes = map.pathPrefixes.filter((path) => !paths.includes(path));
+  for (const path of paths) {
+    assert.deepEqual(owners(path, canonical), ["map"]);
+    assert.deepEqual(owners(path, before), []);
+    assert.deepEqual(assertOwnershipCoverage([path], canonical), {
+      covered: 1,
+    });
+    for (const alias of [path + ".backup", path + "/nested.ts"]) {
+      assert.deepEqual(owners(alias, canonical), []);
+      assert.throws(
+        () => assertOwnershipCoverage([alias], canonical),
+        /FAST_GATE_OWNERSHIP_UNCOVERED/,
+      );
+    }
+  }
+  const tracked = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
+    .split("\0")
+    .filter(Boolean);
+  for (const path of tracked.filter((path) => !paths.includes(path))) {
+    assert.deepEqual(
+      owners(path, canonical),
+      owners(path, before),
+      `unrelated ownership changed: ${path}`,
+    );
+  }
+});

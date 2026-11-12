@@ -71,6 +71,8 @@
         "apps/morro-digital-platform/src/ux/premium-ux-mode.test.ts",
         "apps/morro-digital-platform/src/ux/profile-settings-row-visibility-contract.test.ts",
         "apps/morro-digital-platform/src/ux/css-cascade-contract.ts",
+        "packages/assistant/src/user-profile.ts",
+        "packages/assistant/src/user-profile.test.ts",
         "packages/assistant/src/intent-engine.ts",
         "packages/assistant/src/intent-engine.more-info-i18n.test.ts",
         "packages/assistant/src/dialog-controller.test.ts",
