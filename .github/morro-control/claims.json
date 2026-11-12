@@ -128,6 +128,21 @@
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-09T09:06:31.931Z"
+    },
+    "MD-ASSISTANT-PROFILE-OWNERSHIP-20261112": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "chore/assistant-profile-ownership-20261112",
+      "baseSha": "e1d3098816f1a12a870558a71a4366e7026addd4",
+      "paths": [
+        ".morro/changesets/MD-ASSISTANT-PROFILE-OWNERSHIP-20261112.json",
+        ".morro/ownership.json",
+        "tooling/fabric/ownership-path.test.mjs"
+      ],
+      "domains": ["ci-release"],
+      "risk": "P1",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-13T23:00:00.000Z"
     }
   }
 }
