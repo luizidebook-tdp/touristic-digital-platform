@@ -171,6 +171,17 @@ function validateComposedRuntime(dockerfile) {
     "RELEASE_COMPOSITION_PRODUCER_ROUTE_INVALID",
   );
   requireInstructions(
+    build.instructions,
+    [
+      ["ENV", "NODE_ENV=production"],
+      [
+        "RUN",
+        "TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build && pnpm install --frozen-lockfile --prod",
+      ],
+    ],
+    "RELEASE_COMPOSITION_BUILD_TELEMETRY_CONTRACT_INVALID",
+  );
+  requireInstructions(
     production.instructions,
     [
       ["COPY", "--from=runtime-root /runtime-root /"],

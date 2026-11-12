@@ -50,7 +50,7 @@ CMD ["pnpm", "dev"]
 
 FROM base AS build
 ENV NODE_ENV=production
-RUN pnpm build && pnpm install --frozen-lockfile --prod
+RUN TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build && pnpm install --frozen-lockfile --prod
 
 # Shellless nonroot runtime with the same Node and shared libraries as the build.
 # The unchanged security/release workflows scan the complete image and its digest.

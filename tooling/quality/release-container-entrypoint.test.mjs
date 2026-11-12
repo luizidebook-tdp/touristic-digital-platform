@@ -55,6 +55,11 @@ for (const [label, from, to] of [
     "alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f",
     "alpine:3.22",
   ],
+  [
+    "missing build telemetry opt-out",
+    "TURBO_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 pnpm build",
+    "pnpm build",
+  ],
   ["old zlib package", "zlib=1.4-r0", "zlib=1.3.2-r0"],
   ["different Node package", "nodejs=22.23.5-r0", "nodejs=22.23.3-r0"],
   ["unpinned dependency", "zstd-libs=1.5.7-r0", "zstd-libs"],
