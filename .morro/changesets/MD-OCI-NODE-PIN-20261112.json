@@ -3,7 +3,7 @@
   "id": "MD-OCI-NODE-PIN-20261112",
   "objective": "refresh-unavailable-alpine-node-pin-and-preserve-verified-runtime-composition-without-deploy",
   "baseSha": "b0ad9cf5bdd71dc1046e8ef4543d222d628629fd",
-  "branch": "reconcile/oci-retirement-20261112",
+  "branch": "chore/oci-retirement-20261112",
   "state": "MERGED",
   "risk": "critical",
   "scope": "PLATFORM",
