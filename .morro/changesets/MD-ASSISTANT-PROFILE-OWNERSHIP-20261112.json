@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-ASSISTANT-PROFILE-OWNERSHIP-20261112",
   "objective": "register-exact-local-assistant-profile-paths-under-existing-map-domain-without-widening-authority",
-  "baseSha": "e1d3098816f1a12a870558a71a4366e7026addd4",
+  "baseSha": "77fe1c697a0b68f2c11d4be58208675627162482",
   "branch": "chore/assistant-profile-ownership-20261112",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {
