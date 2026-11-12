@@ -128,6 +128,23 @@
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-09T09:06:31.931Z"
+    },
+    "MD-OCI-NODE-PIN-20261112": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "fix/oci-node-pin-20261112",
+      "baseSha": "cc98d768ae3688789230b55601375a9323838003",
+      "paths": [
+        ".morro/changesets/MD-OCI-NODE-PIN-20261112.json",
+        "Dockerfile",
+        "tooling/quality/runtime-image-composition.mjs",
+        "tooling/quality/release-container-entrypoint.mjs",
+        "tooling/quality/release-container-entrypoint.test.mjs"
+      ],
+      "domains": ["ci-release"],
+      "risk": "P0",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-13T23:00:00.000Z"
     }
   }
 }
