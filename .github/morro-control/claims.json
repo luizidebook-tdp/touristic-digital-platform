@@ -133,7 +133,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "fix/oci-node-pin-20261112",
-      "baseSha": "cc98d768ae3688789230b55601375a9323838003",
+      "baseSha": "9956b9839c264bf237ec6f0d927362be66b96d7c",
       "paths": [
         ".morro/changesets/MD-OCI-NODE-PIN-20261112.json",
         "Dockerfile",

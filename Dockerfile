@@ -1,5 +1,5 @@
 # Build and run on the same maintained musl ABI. The distro Node build uses
-# shared zlib; zlib 1.3.2-r1 includes upstream fix df84af25dc1942490e1d1c899a07619152a46148.
+# shared zlib; keep package identities aligned with the signed Alpine index.
 FROM alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f AS runtime-source
 RUN apk add --no-cache \
     ada-libs=2.9.2-r4 \
@@ -17,12 +17,12 @@ RUN apk add --no-cache \
     libstdc++=14.2.0-r6 \
     musl=1.2.5-r13 \
     nghttp2-libs=1.69.0-r0 \
-    nodejs=22.23.4-r0 \
+    nodejs=22.23.5-r0 \
     simdjson=3.12.0-r0 \
     simdutf=7.2.1-r0 \
     sqlite-libs=3.49.2-r1 \
     tzdata=2026f-r0 \
-    zlib=1.3.2-r1 \
+    zlib=1.4-r0 \
     zstd-libs=1.5.7-r0
 
 # Retain complete selected package payloads and their genuine installed records.

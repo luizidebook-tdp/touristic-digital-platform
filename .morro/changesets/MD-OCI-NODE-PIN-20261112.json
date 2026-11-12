@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "MD-OCI-NODE-PIN-20261112",
   "objective": "refresh-unavailable-alpine-node-pin-and-preserve-verified-runtime-composition-without-deploy",
-  "baseSha": "cc98d768ae3688789230b55601375a9323838003",
+  "baseSha": "9956b9839c264bf237ec6f0d927362be66b96d7c",
   "branch": "fix/oci-node-pin-20261112",
   "state": "IMPLEMENTING",
   "risk": "critical",

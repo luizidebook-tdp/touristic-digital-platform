@@ -151,12 +151,12 @@ function validateComposedRuntime(dockerfile) {
   }
   assert.equal(
     packages.get("nodejs"),
-    "22.23.4-r0",
+    "22.23.5-r0",
     "RELEASE_COMPOSITION_NODE_VERSION_MISMATCH",
   );
   assert.equal(
     packages.get("zlib"),
-    "1.3.2-r1",
+    "1.4-r0",
     "RELEASE_COMPOSITION_ZLIB_VERSION_MISMATCH",
   );
   requireInstructions(

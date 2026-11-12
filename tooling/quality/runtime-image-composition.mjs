@@ -19,7 +19,7 @@ import { pathToFileURL } from "node:url";
 import { deflateSync, gunzipSync, gzipSync, inflateSync } from "node:zlib";
 
 // Captured signed Alpine v3.22 main/x86_64 APKINDEX, SHA256
-// 2db789b7015a525ef86b5a9f0df71c8b960b76c9b72a79f56250db4292e7feba.
+// 4dabf38dc88ea7c50b2c12e933ce4d6079859ef5009d6b71e8a6fb6da599c573.
 // Values are [version, signed-index control checksum]. apk remains responsible
 // for signature verification. Copy real installer records without rewriting them.
 export const runtimePackages = Object.freeze({
@@ -38,12 +38,12 @@ export const runtimePackages = Object.freeze({
   "libstdc++": ["14.2.0-r6", "Q17fXKwemP/k+zYJ9I3tg7Nb7BTJ0="],
   musl: ["1.2.5-r13", "Q1Kd1D3m57UuRVKkGgKHd5yKqNj0s="],
   "nghttp2-libs": ["1.69.0-r0", "Q1fwuEkacafZMCRajgY76tWWnN+tk="],
-  nodejs: ["22.23.4-r0", "Q1lDcubCzMMtldKE5vRMWmDKlYKxg="],
+  nodejs: ["22.23.5-r0", "Q1/t/llHqRy6Nr5kGoGc7DYMBywyg="],
   simdjson: ["3.12.0-r0", "Q1y6Rnh6NjlUzx4cMD3lejQH3QJo0="],
   simdutf: ["7.2.1-r0", "Q1Ig81T8yb4WRRkLuf4OB8lD34UKo="],
   "sqlite-libs": ["3.49.2-r1", "Q1yzGtJ1KT/55wX0HRyGJudxpYnkU="],
   tzdata: ["2026f-r0", "Q1HExDU9K4MpYGTrOCH5ilOhHPt7A="],
-  zlib: ["1.3.2-r1", "Q1/4h5E7MrlBVDXCCuIDGXwWkzrzs="],
+  zlib: ["1.4-r0", "Q1EHjMEsJcFTsyYtFfIcswNU8ZoRA="],
   "zstd-libs": ["1.5.7-r0", "Q1UMgxErVhn0jTbWkZCky3xx8Vx9I="],
 });
 
@@ -447,7 +447,7 @@ export function verifyRuntime() {
     "nonroot",
     "RUNTIME_NAMED_IDENTITY_MISSING",
   );
-  assert.equal(process.versions.node, "22.23.4", "RUNTIME_NODE_VERSION");
+  assert.equal(process.versions.node, "22.23.5", "RUNTIME_NODE_VERSION");
   assert.equal(process.arch, "x64", "RUNTIME_ARCH");
   const database = readFileSync("/" + installedPath, "utf8");
   const parsed = parseInstalledDatabase(database);
@@ -480,7 +480,7 @@ export function verifyRuntime() {
     true,
     "RUNTIME_ZLIB_NOT_SHARED",
   );
-  assert.equal(process.versions.zlib, "1.3.2", "RUNTIME_ZLIB_VERSION");
+  assert.equal(process.versions.zlib, "1.4", "RUNTIME_ZLIB_VERSION");
   const sharedObjects = process.report.getReport().sharedObjects;
   assert.ok(
     sharedObjects.some((path) => /\/libz[.]so[.]1(?:[.]\d+)*$/u.test(path)),
