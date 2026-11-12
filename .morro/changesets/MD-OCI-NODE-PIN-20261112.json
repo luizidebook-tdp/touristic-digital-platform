@@ -4,7 +4,7 @@
   "objective": "refresh-unavailable-alpine-node-pin-and-preserve-verified-runtime-composition-without-deploy",
   "baseSha": "9956b9839c264bf237ec6f0d927362be66b96d7c",
   "branch": "fix/oci-node-pin-20261112",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
