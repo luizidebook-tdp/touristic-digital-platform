@@ -18,7 +18,9 @@
         "packages/assistant/src/dialog-controller.ts",
         "packages/assistant/src/dialog-controller.presentation-language.test.ts",
         "apps/morro-digital-platform/src/assistant/assistant-domain-adapter.ts",
-        "apps/morro-digital-platform/src/assistant/assistant-domain-adapter.test.ts"
+        "apps/morro-digital-platform/src/assistant/assistant-domain-adapter.test.ts",
+        "packages/assistant/src/user-profile.ts",
+        "packages/assistant/src/user-profile.test.ts"
       ],
       "risk": "MEDIUM",
       "dependsOn": [

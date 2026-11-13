@@ -148,7 +148,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "chore/assistant-profile-impact-20261112",
-      "baseSha": "fdd896493708525ff0ed0aa580ec99ef4faa866f",
+      "baseSha": "1ce64d9ff214ca1d8c4baccca540286b141913f6",
       "paths": [
         ".morro/changesets/MD-ASSISTANT-PROFILE-IMPACT-20261112.json",
         "tooling/ci/test-impact-manifest.json",
