@@ -47,36 +47,6 @@
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-06T11:48:29.876Z"
     },
-    "MD-GUEST-QUOTE-DESTINATION-BOUNDARY-20261106": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "fix/guest-quote-destination-boundary-20261106",
-      "baseSha": "ec350f3de8e6546dc024cff5709a7371f4bdfefa",
-      "paths": [
-        "services/ticketing/src/commerce-public-http-transport.ts",
-        "services/ticketing/src/commerce-public-http-transport.test.ts",
-        "services/ticketing/src/public-http-transport.ts",
-        ".morro/changesets/MD-GUEST-QUOTE-DESTINATION-BOUNDARY-20261106.json"
-      ],
-      "domains": ["ticketing"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-06T18:46:44.818Z"
-    },
-    "MD-D02-GUEST-QUOTE-METHOD-GUARD-20261106": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "fix/d02-guest-quote-method-guard-20261106",
-      "baseSha": "351ced2eb901d6f591ac8a6d5f4c943fa34481b1",
-      "paths": [
-        "apps/morro-digital-platform/tooling/ticketing-operator-authorization.test.mjs",
-        ".morro/changesets/MD-D02-GUEST-QUOTE-METHOD-GUARD-20261106.json"
-      ],
-      "domains": ["ticketing"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-06T20:15:16.802Z"
-    },
     "MD-AUTH-CONTRACT-D02-INVENTORY-PIN-20261106": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
@@ -90,22 +60,6 @@
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-06T21:31:03.791Z"
-    },
-    "MD-GUEST-QUOTE-DESTINATION-SUCCESSOR-20261106": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "fix/guest-quote-destination-successor-20261106",
-      "baseSha": "8fb13f903db6d8010e6995294704c9f61290db81",
-      "paths": [
-        "services/ticketing/src/commerce-public-http-transport.ts",
-        "services/ticketing/src/commerce-public-http-transport.test.ts",
-        "services/ticketing/src/public-http-transport.ts",
-        ".morro/changesets/MD-GUEST-QUOTE-DESTINATION-SUCCESSOR-20261106.json"
-      ],
-      "domains": ["ticketing"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-06T23:00:02.307Z"
     },
     "MD-EXTERNAL-STAGING-ADMISSION-20261108": {
       "owner": "CHATGPT-PRO-CONTROL",
