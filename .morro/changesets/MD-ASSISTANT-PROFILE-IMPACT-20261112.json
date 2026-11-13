@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-ASSISTANT-PROFILE-IMPACT-20261112",
   "objective": "admit-exact-local-assistant-profile-paths-to-existing-assistant-conversation-impact-domain-without-changing-risk-or-proof-requirements",
-  "baseSha": "fdd896493708525ff0ed0aa580ec99ef4faa866f",
+  "baseSha": "1ce64d9ff214ca1d8c4baccca540286b141913f6",
   "branch": "chore/assistant-profile-impact-20261112",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {

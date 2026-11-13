@@ -238,3 +238,56 @@ test("Control Center activation UI has exact auth ownership and retains the auth
     ["ci-release"],
   );
 });
+
+test("assistant profile exact paths inherit existing conversation proof without admitting aliases", () => {
+  const manifest = JSON.parse(
+    readFileSync(
+      new URL("./test-impact-manifest.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const domain = manifest.domains["assistant-conversation"];
+  assert.equal(domain.risk, "MEDIUM");
+  assert.deepEqual(domain.dependsOn, [
+    "assistant",
+    "explore",
+    "map",
+    "navigation",
+    "search",
+    "commerce",
+    "payments",
+    "geolocation",
+    "network",
+    "shell",
+  ]);
+  assert.deepEqual(domain.suites, [
+    "assistant-conversation-continuity-browser-contract.yml",
+    "assistant-input-menu-flow-v1-parity.yml",
+    "navigation-turn-by-turn-parity.yml",
+    "navigation-accessibility-baseline.yml",
+  ]);
+  assert.equal(domain.needsBrowser, true);
+  assert.equal(domain.needsVisual, true);
+  assert.equal(domain.needsDatabase, false);
+  assert.equal(domain.needsDependencyAudit, false);
+  assert.equal(domain.needsFullSecurity, false);
+  const { files: baselineFiles, ...baseline } = analyzeFiles([
+    "packages/assistant/src/dialog-controller.ts",
+  ]);
+  for (const path of [
+    "packages/assistant/src/user-profile.ts",
+    "packages/assistant/src/user-profile.test.ts",
+  ]) {
+    assert.equal(domain.paths.filter((rule) => rule === path).length, 1);
+    const { files, ...decision } = analyzeFiles([path]);
+    assert.deepEqual(files, [path]);
+    assert.deepEqual(decision, baseline);
+    assert.equal(decision.classificationBlocked, false);
+    assert.ok(decision.domains.includes("assistant-conversation"));
+    for (const alias of nearCollisions(path)) {
+      const rejected = analyzeFiles([alias]);
+      assert.equal(rejected.classificationBlocked, true, alias);
+      assert.ok(rejected.unknownFiles.includes(alias), alias);
+    }
+  }
+});
