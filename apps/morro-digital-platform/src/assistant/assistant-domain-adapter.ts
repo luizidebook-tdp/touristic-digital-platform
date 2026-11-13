@@ -463,10 +463,23 @@ export function createAssistantBrowserDomainHandlers(
         if (operation && rawPlace) {
           const place = canonicalFavoritePlace(rawPlace);
           const favorites = profile.getFavoritePlaces();
-          const existing = favorites.find(
+          const matches = favorites.filter(
             (favorite) =>
               normalizeSearchText(favorite.name) === normalizeSearchText(place),
           );
+
+          // A name-only command cannot choose between canonical homonyms.
+          if (matches.length > 1) {
+            return {
+              text: favoriteMutationText(language, "ask_remove"),
+              metadata: {
+                domain: "favorites",
+                state: "awaiting_place",
+                operation,
+              },
+            };
+          }
+          const existing = matches[0];
 
           if (operation === "add") {
             if (existing) {
@@ -504,7 +517,7 @@ export function createAssistantBrowserDomainHandlers(
               },
             };
           }
-          profile.removeFavoritePlace(existing.name);
+          profile.removeFavoritePlace(existing);
           return {
             text: favoriteMutationText(language, "removed", existing.name),
             metadata: {
