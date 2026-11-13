@@ -112,6 +112,23 @@
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-13T23:00:00.000Z"
+    },
+    "MD-D02-A01-RECONCILED-20261113": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "fix/d02-a01-reconciled-20261113",
+      "baseSha": "c7d20a8c34e97203b6844d7bfd32e925f76b4bac",
+      "paths": [
+        "apps/morro-digital-platform/tooling/ticketing-operator-authorization.test.mjs",
+        "services/ticketing/src/commerce-public-http-transport.test.ts",
+        "services/ticketing/src/commerce-public-http-transport.ts",
+        "services/ticketing/src/public-http-transport.ts",
+        ".morro/changesets/MD-D02-A01-RECONCILED-20261113.json"
+      ],
+      "domains": ["ticketing"],
+      "risk": "P0",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-16T23:00:00.000Z"
     }
   }
 }
