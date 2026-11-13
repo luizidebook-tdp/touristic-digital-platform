@@ -1,5 +1,7 @@
 import { ensureFeatureStyles } from "../map/feature-styles.js";
 import {
+  ASSISTANT_PROFILE_STORAGE_KEY,
+  sameAssistantProfilePlace,
   createAssistantContextManager,
   createAssistantDialogController,
   createAssistantUserProfileManager,
@@ -14,6 +16,7 @@ import {
 import type {
   ExploreLocationsCommand,
   ExploreLocationsControl,
+  ExploreLocationsStateSnapshot,
 } from "../map/explore-locations-control.js";
 import type { NavigationSessionBootstrap } from "../navigation/navigation-session-bootstrap.js";
 import { fetchMorroWeather } from "../weather/weather-widget.js";
@@ -79,7 +82,10 @@ interface AssistantRuntimeEnvironmentGlobal {
 export interface BrowserAssistantRuntimeOptions {
   readonly document: Document;
   readonly navigation: Pick<NavigationSessionBootstrap, "start" | "stop">;
-  readonly explore?: Pick<ExploreLocationsControl, "execute" | "getState">;
+  readonly explore?: Pick<
+    ExploreLocationsControl,
+    "execute" | "getState" | "refreshSavedPlaceActions"
+  >;
   readonly storage?: Storage;
   readonly fetch?: typeof globalThis.fetch;
   readonly mapboxAccessToken?: string;
@@ -677,6 +683,103 @@ function resolveStorage(
   }
 }
 
+function saveCanonicalPlaceAction(
+  input: string,
+  selected: ExploreLocationsStateSnapshot | undefined,
+  profile: ReturnType<typeof createAssistantUserProfileManager>,
+  storage: Pick<Storage, "getItem" | "setItem"> | undefined,
+  language: ReturnType<typeof normalizeAssistantVoiceLanguage>,
+): AssistantDialogResponse | null {
+  if (!input.startsWith("place-action:save:")) return null;
+  const copy = {
+    pt: [
+      "Local salvo neste dispositivo.",
+      "Local removido dos salvos.",
+      "Não foi possível salvar a alteração neste dispositivo.",
+      "Selecione o local novamente antes de salvar.",
+    ],
+    en: [
+      "Place saved on this device.",
+      "Place removed from saved places.",
+      "Could not save the change on this device.",
+      "Select the place again before saving.",
+    ],
+    es: [
+      "Lugar guardado en este dispositivo.",
+      "Lugar eliminado de los guardados.",
+      "No se pudo guardar el cambio en este dispositivo.",
+      "Selecciona el lugar de nuevo antes de guardarlo.",
+    ],
+    he: [
+      "המקום נשמר במכשיר הזה.",
+      "המקום הוסר מהמקומות השמורים.",
+      "לא ניתן לשמור את השינוי במכשיר הזה.",
+      "יש לבחור את המקום שוב לפני השמירה.",
+    ],
+  } as const;
+  const response = (state: "saved" | "removed" | "unavailable" | "stale") => ({
+    text:
+      copy[language][
+        { saved: 0, removed: 1, unavailable: 2, stale: 3 }[state]
+      ] ?? copy[language][2],
+    metadata: { action: "place_save", state },
+  });
+  const adding = input === `place-action:save:${selected?.placeId}:add`;
+  const removing = input === `place-action:save:${selected?.placeId}:remove`;
+  if (
+    selected?.stage !== "detail" ||
+    selected.source !== "canonical" ||
+    !selected.placeId ||
+    !selected.destinationId ||
+    !selected.place?.trim() ||
+    (!adding && !removing)
+  )
+    return response("stale");
+  if (!storage) return response("unavailable");
+  try {
+    const identity = {
+      name: selected.place,
+      placeId: selected.placeId,
+      destinationId: selected.destinationId,
+    };
+    const current = profile.getUserProfile();
+    const favorites = current.favoritePlaces.filter(
+      (place) => !sameAssistantProfilePlace(place, identity),
+    );
+    if (adding)
+      favorites.push({
+        ...identity,
+        category: selected.category,
+        savedAt: Date.now(),
+      });
+    // The profile manager deliberately swallows storage errors. Persist and
+    // read back before changing its shared in-memory state or reporting success.
+    storage.setItem(
+      ASSISTANT_PROFILE_STORAGE_KEY,
+      JSON.stringify({ ...current, favoritePlaces: favorites }),
+    );
+    const persisted: unknown = JSON.parse(
+      storage.getItem(ASSISTANT_PROFILE_STORAGE_KEY) ?? "null",
+    );
+    if (
+      !persisted ||
+      typeof persisted !== "object" ||
+      !("favoritePlaces" in persisted) ||
+      JSON.stringify(persisted.favoritePlaces) !== JSON.stringify(favorites)
+    )
+      return response("unavailable");
+    if (adding)
+      profile.addFavoritePlace({
+        ...identity,
+        category: selected.category,
+      });
+    else profile.removeFavoritePlace(identity);
+    return response(adding ? "saved" : "removed");
+  } catch {
+    return response("unavailable");
+  }
+}
+
 function resolveMapboxAccessToken(override?: string): string | undefined {
   const explicit = override?.trim();
   if (explicit) return explicit;
@@ -1217,6 +1320,29 @@ export function installBrowserAssistantRuntime(
           action: "open_ticketing_checkout",
         },
       };
+    }
+
+    const savedPlaceResponse = value.startsWith("place-action:save:")
+      ? saveCanonicalPlaceAction(
+          value,
+          options.explore?.getState(),
+          profile,
+          storage,
+          presentationLanguage(),
+        )
+      : null;
+    if (savedPlaceResponse) {
+      if (
+        savedPlaceResponse.metadata?.state === "saved" ||
+        savedPlaceResponse.metadata?.state === "removed"
+      )
+        options.explore?.refreshSavedPlaceActions?.();
+      clearAssistantDomOptions(options.document);
+      removePhotoPresentation(options.document);
+      appendStandardMessage("assistant", savedPlaceResponse.text);
+      currentPresentation = snapshotPresentation(savedPlaceResponse.text, []);
+      voice?.speak(savedPlaceResponse.text, voiceLanguage());
+      return savedPlaceResponse;
     }
 
     const residualCommand = resolveAssistantV1ResidualCommand(value);

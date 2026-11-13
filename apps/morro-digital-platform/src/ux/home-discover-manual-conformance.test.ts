@@ -6,6 +6,8 @@ import { transpileModule } from "typescript";
 
 import { describe, expect, it } from "vitest";
 
+import { createManualPlaceSearch } from "../home/manual-place-search.js";
+import { createPublicPlaceMapClient } from "../map/public-place-map-client-v2.js";
 import { createAppShellMarkup } from "../layouts/app-shell.js";
 import { getV1ExploreUiCopy } from "../map/explore-v1-i18n.js";
 
@@ -405,6 +407,18 @@ consumeSaved();`,
     },
   );
 
+  it("preserves canonical identity for saved-place navigation", async () => {
+    const place = {
+      name: "Farol",
+      category: "attractions",
+      placeId: "place-a",
+      destinationId: "morro-de-sao-paulo",
+    };
+    const result = await readSaved(JSON.stringify({ favoritePlaces: [place] }));
+    expect(result.rows).toEqual([place]);
+    expect(result.writes).toBe(0);
+  });
+
   it("reads saved names and categories without persisting visit updates", async () => {
     const result = await readSaved(
       JSON.stringify({
@@ -417,5 +431,93 @@ consumeSaved();`,
     expect(result.statuses).not.toEqual((await readSaved(null)).statuses);
     expect(result.writes).toBe(0);
     expect(result.focused).toBe(1);
+  });
+});
+
+describe("saved-place identity selection", () => {
+  it("uses canonical ID, preserves legacy lookup, and rejects other destinations", async () => {
+    const home = await readRepository(
+      "apps/morro-digital-platform/src/home/home-discover-navigation.ts",
+    );
+    const start = home.indexOf("    const select = async (place:");
+    const end = home.indexOf("    const addRow =", start);
+    const commands: unknown[] = [];
+    let errors = 0;
+    let closed = 0;
+    const selectionMode = { current: "saved" };
+    const select = runInNewContext(
+      transpileModule(home.slice(start, end) + "; select;", {}).outputText,
+      {
+        get action() {
+          return selectionMode.current;
+        },
+        document: {},
+        getMorroDigitalApplication: () => ({
+          exploreLocations: {
+            execute: (command: unknown) => {
+              commands.push(command);
+              return Promise.resolve(true);
+            },
+          },
+        }),
+        showStatus: () => {
+          errors++;
+        },
+        copy: [],
+        panelIsCurrent: () => true,
+        closeManual: () => {
+          closed++;
+        },
+      },
+    ) as (place: {
+      name: string;
+      placeId?: string;
+      destinationId?: string;
+    }) => Promise<void>;
+    await select({
+      name: "Farol",
+      placeId: "a",
+      destinationId: "morro-de-sao-paulo",
+    });
+    await select({ name: "Farol" });
+    await select({ name: "Farol", placeId: "a", destinationId: "itacare" });
+    await select({ name: "Farol", placeId: "a" });
+    expect(commands).toEqual([
+      { type: "select_place_id", placeId: "a" },
+      { type: "select_place", place: "Farol" },
+    ]);
+    expect(errors).toBe(2);
+    expect(closed).toBe(2);
+    selectionMode.current = "search";
+    const search = createManualPlaceSearch(
+      createPublicPlaceMapClient(
+        async () =>
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  id: "from-search",
+                  name: "Farol",
+                  category: "beaches",
+                  lat: -13.38,
+                  lng: -38.92,
+                  presentation: { markerKey: "beaches", priority: 1 },
+                },
+              ],
+              nextCursor: null,
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+    const snapshot = await search("Farol");
+    expect(snapshot.source).toBe("canonical");
+    expect(snapshot.results).toHaveLength(1);
+    await select(snapshot.results[0]!);
+    expect(commands.at(-1)).toEqual({
+      type: "select_place_id",
+      placeId: "from-search",
+    });
+    expect(closed).toBe(3);
   });
 });
