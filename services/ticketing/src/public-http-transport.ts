@@ -114,6 +114,7 @@ export interface TicketingCheckoutHandoffPort {
 
 export interface TicketingPublicHttpTransportDependencies {
   readonly enabled: boolean;
+  readonly destinationId?: string;
   readonly reservations: MySqlTicketReservationRepository;
   readonly reads: MySqlTicketingPublicReadRepository;
   readonly holders: MySqlTicketHolderProfileRepository;
@@ -492,7 +493,11 @@ export class TicketingPublicHttpTransport {
         }
         const inventory =
           await this.dependencies.reservations.findInventoryById(inventoryId);
-        if (!inventory) {
+        if (
+          !inventory ||
+          (this.dependencies.destinationId !== undefined &&
+            inventory.destinationId !== this.dependencies.destinationId)
+        ) {
           return response(404, { error: "INVENTORY_NOT_FOUND" }, correlation);
         }
         const availability = await this.dependencies.reservations.availability(

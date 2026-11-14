@@ -18,6 +18,7 @@ const SESSION_VERSION = 1;
 const BUSINESS_ID = /^[a-z0-9][a-z0-9_-]{0,119}$/u;
 const INVENTORY_ID = /^mpi_[a-f0-9]{32}$/u;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,120}$/u;
+const DESTINATION_ID = /^[A-Za-z0-9:_-]{2,120}$/u;
 
 interface CommerceSessionClaims {
   readonly version: 1;
@@ -150,6 +151,7 @@ function secureRequest(request: TicketingHttpRequest): boolean {
 
 function consumerRouteAllowed(pathname: string, method: string): boolean {
   const relative = pathname.slice(ticketingHttpPrefix.length);
+  if (relative === "/quote") return method === "POST";
   if (relative === "/reservations")
     return method === "GET" || method === "POST";
   if (/^\/reservations\/trv_[A-Za-z0-9_-]+$/u.test(relative))
@@ -327,6 +329,12 @@ export class TicketingCommerceHttpTransport {
   constructor(
     private readonly dependencies: TicketingCommerceHttpTransportDependencies,
   ) {
+    if (
+      typeof dependencies.destinationId !== "string" ||
+      !DESTINATION_ID.test(dependencies.destinationId)
+    ) {
+      throw new Error("TICKETING_COMMERCE_DESTINATION_REQUIRED");
+    }
     this.sessions = new CommerceSessionAuthority(
       dependencies.offlineProvisioningSecret,
     );
