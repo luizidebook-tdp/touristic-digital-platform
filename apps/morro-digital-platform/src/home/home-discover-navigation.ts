@@ -418,7 +418,16 @@ export function installHomeDiscoverNavigation({
       name: string;
       category?: string;
       placeId?: string;
+      destinationId?: string;
     }): Promise<void> => {
+      if (
+        action === "saved" &&
+        (place.placeId || place.destinationId) &&
+        place.destinationId !== "morro-de-sao-paulo"
+      ) {
+        showStatus(() => copy[14]);
+        return;
+      }
       const explore = getMorroDigitalApplication(document)?.exploreLocations;
       const selected =
         explore &&
@@ -439,6 +448,7 @@ export function installHomeDiscoverNavigation({
       name: string;
       category?: string;
       placeId?: string;
+      destinationId?: string;
     }): void => {
       const row = document.createElement("li");
       const button = document.createElement("button");
@@ -479,6 +489,10 @@ export function installHomeDiscoverNavigation({
         places.forEach((place) =>
           addRow({
             name: place.name,
+            ...(place.placeId ? { placeId: place.placeId } : {}),
+            ...(place.destinationId
+              ? { destinationId: place.destinationId }
+              : {}),
             ...(place.category ? { category: place.category } : {}),
           }),
         );

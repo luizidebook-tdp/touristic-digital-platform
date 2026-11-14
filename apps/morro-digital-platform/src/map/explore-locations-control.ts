@@ -140,6 +140,8 @@ export interface ExploreActiveTourSnapshot {
 export interface ExploreLocationsStateSnapshot {
   readonly category: string | null;
   readonly place: string | null;
+  readonly placeId?: string | null;
+  readonly destinationId?: string | null;
   readonly source: "canonical" | "local" | "mapbox" | "legacy" | null;
   readonly stage: ExploreStage;
   readonly markerCount: number;
@@ -168,6 +170,7 @@ export interface ExploreLocationsControl {
   prepareExternalTour(): Promise<ExternalTourMapPreparation | null>;
   execute(command: ExploreLocationsCommand): Promise<boolean>;
   getState(): ExploreLocationsStateSnapshot;
+  refreshSavedPlaceActions?(): void;
   close(): void;
   setGeospatialEngine(engine: GeospatialEngine | undefined): void;
   setNativeMap(map: MapboxGlMapLike | undefined): void;
@@ -971,6 +974,21 @@ export function installExploreLocationsControl({
           ? (activePlaceLocation?.category ?? null)
           : null),
       place: activeStage === "detail" ? (activePlace ?? null) : null,
+      placeId:
+        activeStage === "detail" &&
+        activePlaceLocation &&
+        "source" in activePlaceLocation &&
+        activePlaceLocation.source === "canonical" &&
+        "placeId" in activePlaceLocation
+          ? activePlaceLocation.placeId
+          : null,
+      destinationId:
+        activeStage === "detail" &&
+        activePlaceLocation &&
+        "source" in activePlaceLocation &&
+        activePlaceLocation.source === "canonical"
+          ? CANONICAL_MAP_DESTINATION_ID
+          : null,
       source:
         activeStage === "detail" && activePlaceLocation
           ? "source" in activePlaceLocation
@@ -1575,6 +1593,21 @@ export function installExploreLocationsControl({
   };
 
   const handlePlaceAction = (value: string): void => {
+    if (value.startsWith("place-action:share:")) {
+      const location = activePlaceLocation;
+      if (
+        activeStage === "detail" &&
+        location &&
+        "source" in location &&
+        location.source === "canonical" &&
+        "placeId" in location &&
+        value === `place-action:share:${location.placeId}` &&
+        activePlaceActionValues.includes(value)
+      ) {
+        shareActivePlace();
+      }
+      return;
+    }
     if (value.startsWith("place-action:info:")) {
       const detail = readActivePlaceDetail(value);
       if (detail) {
@@ -1694,6 +1727,8 @@ export function installExploreLocationsControl({
     requestAssistantOpen(document);
   };
 
+  let refreshSavedPlaceActions = (): void => {};
+
   const renderPlaceActionsRail = (
     placeActions: readonly Readonly<{
       actionId: string;
@@ -1711,6 +1746,10 @@ export function installExploreLocationsControl({
     placeName: string,
     locale: AssistantLocale,
   ): HTMLButtonElement | null => {
+    refreshSavedPlaceActions = () => {
+      if (activeStage === "detail" && activePlace === placeName)
+        renderPlaceActionsRail(placeActions, primaryAction, placeName, locale);
+    };
     if (primaryAction?.actionId === "info") {
       primaryAction = readActivePlaceDetail(primaryAction.value)
         ? { ...primaryAction, label: getV1ExploreLabel("viewDetails", locale) }
@@ -1760,14 +1799,54 @@ export function installExploreLocationsControl({
       action: "back-places",
     });
 
-    activePlaceActionValues = Object.freeze(
-      Array.from(
-        new Set([
-          ...activePlaceActionValues,
-          ...options.map(({ value }) => value),
-        ]),
-      ),
-    );
+    const selected = stateSnapshot();
+    if (
+      selected.source === "canonical" &&
+      selected.placeId &&
+      selected.destinationId
+    ) {
+      let saved = false;
+      try {
+        const stored: unknown = JSON.parse(
+          document.defaultView?.localStorage?.getItem("morro_user_profile") ??
+            "null",
+        );
+        if (
+          stored &&
+          typeof stored === "object" &&
+          "favoritePlaces" in stored &&
+          Array.isArray(stored.favoritePlaces)
+        )
+          saved = stored.favoritePlaces.some(
+            (place: unknown) =>
+              place &&
+              typeof place === "object" &&
+              "placeId" in place &&
+              "destinationId" in place &&
+              place.placeId === selected.placeId &&
+              place.destinationId === selected.destinationId,
+          );
+      } catch {
+        /* Unavailable storage cannot establish a saved state. */
+      }
+      for (const option of options) {
+        if (
+          option.value === `place-action:save:${selected.placeId}:add` ||
+          option.value === `place-action:save:${selected.placeId}:remove`
+        ) {
+          option.value = `place-action:save:${selected.placeId}:${saved ? "remove" : "add"}`;
+          option.label = saved
+            ? {
+                pt: "Remover dos salvos",
+                en: "Remove from saved",
+                es: "Eliminar de guardados",
+                he: "הסרה מהשמורים",
+              }[locale]
+            : getV1ExploreLabel("save", locale);
+        }
+      }
+    }
+    activePlaceActionValues = Object.freeze(options.map(({ value }) => value));
 
     const previousValue =
       document.activeElement instanceof HTMLButtonElement &&
@@ -3050,6 +3129,7 @@ export function installExploreLocationsControl({
     },
     execute,
     getState: stateSnapshot,
+    refreshSavedPlaceActions: () => refreshSavedPlaceActions(),
     close: () => backToMenu(),
     setGeospatialEngine(engine: GeospatialEngine | undefined) {
       const previous = geospatialEngine;
