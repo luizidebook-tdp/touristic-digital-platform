@@ -16,9 +16,7 @@
     "contracts": []
   },
   "reads": {
-    "contracts": [
-      "TDP-CONTROL-PLANE-V3.2"
-    ]
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
   },
   "produces": {
     "events": [],
@@ -50,12 +48,7 @@
   ],
   "contextPack": {
     "maxBytes": 65536,
-    "include": [
-      "changeset",
-      "git-identity",
-      "ownership",
-      "proof-plan"
-    ]
+    "include": ["changeset", "git-identity", "ownership", "proof-plan"]
   },
   "proof": {
     "budget": {
@@ -65,11 +58,7 @@
     "commands": [
       {
         "id": "crm-storage-ownership",
-        "argv": [
-          "node",
-          "--test",
-          "tooling/fabric/ownership-path.test.mjs"
-        ],
+        "argv": ["node", "--test", "tooling/fabric/ownership-path.test.mjs"],
         "timeoutSeconds": 240
       }
     ],

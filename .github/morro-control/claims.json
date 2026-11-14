@@ -42,9 +42,7 @@
         "docs/operations/PRODUCTION-RELEASE-READINESS.md",
         "docs/operations/PRODUCTION-GO-CHECKLIST.md"
       ],
-      "domains": [
-        "ci-release"
-      ],
+      "domains": ["ci-release"],
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-06T11:48:29.876Z"
@@ -58,9 +56,7 @@
         ".github/workflows/auth-integration-contract.yml",
         ".morro/changesets/MD-AUTH-CONTRACT-D02-INVENTORY-PIN-20261106.json"
       ],
-      "domains": [
-        "ci-release"
-      ],
+      "domains": ["ci-release"],
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-06T21:31:03.791Z"
@@ -82,9 +78,7 @@
         "tooling/ci/staging-oci-deployment-evidence.test.mjs",
         "tooling/ci/circleci-native-pilot.yml"
       ],
-      "domains": [
-        "ci-release"
-      ],
+      "domains": ["ci-release"],
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-09T09:06:31.931Z"
@@ -99,9 +93,7 @@
         "tooling/ci/test-impact-manifest.json",
         "tooling/ci/impact-analyzer-exact-path.test.mjs"
       ],
-      "domains": [
-        "ci-release"
-      ],
+      "domains": ["ci-release"],
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-13T23:00:00.000Z"
@@ -118,9 +110,7 @@
         "services/ticketing/src/public-http-transport.ts",
         ".morro/changesets/MD-D02-A01-RECONCILED-20261113.json"
       ],
-      "domains": [
-        "ticketing"
-      ],
+      "domains": ["ticketing"],
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-16T23:00:00.000Z"
@@ -135,9 +125,7 @@
         "tooling/fabric/ownership-path.test.mjs",
         ".morro/changesets/MD-CRM-STORAGE-OWNERSHIP-20261114.json"
       ],
-      "domains": [
-        "ci-release"
-      ],
+      "domains": ["ci-release"],
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-15T23:00:00.000Z"
