@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "MD-CRM-STORAGE-OWNERSHIP-20261114",
   "objective": "assign-exact-crm-storage-source-and-test-to-existing-auth-authority-without-lowering-risk-or-proof",
-  "baseSha": "31896714caeb01ca44b735639706cf3294bcc797",
+  "baseSha": "3089c96380dd813a05282f3d20eb45e168b318e5",
   "branch": "infra/acquire-crm-storage-ownership-20261114",
   "state": "IMPLEMENTING",
   "risk": "high",
@@ -16,7 +16,9 @@
     "contracts": []
   },
   "reads": {
-    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+    "contracts": [
+      "TDP-CONTROL-PLANE-V3.2"
+    ]
   },
   "produces": {
     "events": [],
@@ -48,7 +50,12 @@
   ],
   "contextPack": {
     "maxBytes": 65536,
-    "include": ["changeset", "git-identity", "ownership", "proof-plan"]
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "proof-plan"
+    ]
   },
   "proof": {
     "budget": {
@@ -58,7 +65,11 @@
     "commands": [
       {
         "id": "crm-storage-ownership",
-        "argv": ["node", "--test", "tooling/fabric/ownership-path.test.mjs"],
+        "argv": [
+          "node",
+          "--test",
+          "tooling/fabric/ownership-path.test.mjs"
+        ],
         "timeoutSeconds": 240
       }
     ],

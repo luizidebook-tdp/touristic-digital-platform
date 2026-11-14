@@ -42,7 +42,9 @@
         "docs/operations/PRODUCTION-RELEASE-READINESS.md",
         "docs/operations/PRODUCTION-GO-CHECKLIST.md"
       ],
-      "domains": ["ci-release"],
+      "domains": [
+        "ci-release"
+      ],
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-06T11:48:29.876Z"
@@ -56,7 +58,9 @@
         ".github/workflows/auth-integration-contract.yml",
         ".morro/changesets/MD-AUTH-CONTRACT-D02-INVENTORY-PIN-20261106.json"
       ],
-      "domains": ["ci-release"],
+      "domains": [
+        "ci-release"
+      ],
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-06T21:31:03.791Z"
@@ -78,7 +82,9 @@
         "tooling/ci/staging-oci-deployment-evidence.test.mjs",
         "tooling/ci/circleci-native-pilot.yml"
       ],
-      "domains": ["ci-release"],
+      "domains": [
+        "ci-release"
+      ],
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-09T09:06:31.931Z"
@@ -93,22 +99,45 @@
         "tooling/ci/test-impact-manifest.json",
         "tooling/ci/impact-analyzer-exact-path.test.mjs"
       ],
-      "domains": ["ci-release"],
+      "domains": [
+        "ci-release"
+      ],
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-13T23:00:00.000Z"
+    },
+    "MD-D02-A01-RECONCILED-20261113": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "fix/d02-a01-reconciled-20261113",
+      "baseSha": "8339f1f1fbe028fc9e6c9afc1ece4c99fad86cea",
+      "paths": [
+        "apps/morro-digital-platform/tooling/ticketing-operator-authorization.test.mjs",
+        "services/ticketing/src/commerce-public-http-transport.test.ts",
+        "services/ticketing/src/commerce-public-http-transport.ts",
+        "services/ticketing/src/public-http-transport.ts",
+        ".morro/changesets/MD-D02-A01-RECONCILED-20261113.json"
+      ],
+      "domains": [
+        "ticketing"
+      ],
+      "risk": "P0",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-16T23:00:00.000Z"
     },
     "MD-CRM-STORAGE-OWNERSHIP-20261114": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "infra/acquire-crm-storage-ownership-20261114",
-      "baseSha": "31896714caeb01ca44b735639706cf3294bcc797",
+      "baseSha": "3089c96380dd813a05282f3d20eb45e168b318e5",
       "paths": [
         ".morro/ownership.json",
         "tooling/fabric/ownership-path.test.mjs",
         ".morro/changesets/MD-CRM-STORAGE-OWNERSHIP-20261114.json"
       ],
-      "domains": ["ci-release"],
+      "domains": [
+        "ci-release"
+      ],
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-15T23:00:00.000Z"

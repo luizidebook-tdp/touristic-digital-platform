@@ -15,12 +15,37 @@ export type AssistantInterestCategory =
   | "emergencies";
 
 export interface AssistantProfilePlace {
+  placeId?: string;
+  destinationId?: string;
   name: string;
   category?: string | null;
   lat?: number;
   lon?: number;
   timestamp?: number;
   savedAt?: number;
+}
+
+// Canonical IDs are scoped to a destination. Legacy names never match an ID.
+export function sameAssistantProfilePlace(
+  left: AssistantProfilePlace,
+  right: AssistantProfilePlace,
+): boolean {
+  if (
+    left.placeId ||
+    left.destinationId ||
+    right.placeId ||
+    right.destinationId
+  ) {
+    return Boolean(
+      left.placeId &&
+      left.destinationId &&
+      right.placeId &&
+      right.destinationId &&
+      left.placeId === right.placeId &&
+      left.destinationId === right.destinationId,
+    );
+  }
+  return left.name === right.name;
 }
 
 export interface AssistantUserProfile {
@@ -490,7 +515,7 @@ export function createAssistantUserProfileManager(
           timestamp: now(),
         };
         profile.recentPlaces = profile.recentPlaces.filter(
-          (item) => item.name !== place.name,
+          (item) => !sameAssistantProfilePlace(item, place),
         );
         profile.recentPlaces.unshift(entry);
         profile.recentPlaces = profile.recentPlaces.slice(
@@ -520,15 +545,20 @@ export function createAssistantUserProfileManager(
 
     addFavoritePlace(place: AssistantProfilePlace): void {
       if (!place?.name) return;
-      if (!profile.favoritePlaces.some((item) => item.name === place.name)) {
+      if (
+        !profile.favoritePlaces.some((item) =>
+          sameAssistantProfilePlace(item, place),
+        )
+      ) {
         profile.favoritePlaces.push({ ...place, savedAt: now() });
         save();
       }
     },
 
-    removeFavoritePlace(placeName: string): void {
+    removeFavoritePlace(place: AssistantProfilePlace | string): void {
+      const target = typeof place === "string" ? { name: place } : place;
       profile.favoritePlaces = profile.favoritePlaces.filter(
-        (item) => item.name !== placeName,
+        (item) => !sameAssistantProfilePlace(item, target),
       );
       save();
     },

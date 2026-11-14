@@ -92,6 +92,28 @@ describe("assistant browser domain adapter", () => {
     });
   });
 
+  it("does not remove ambiguous canonical homonyms by name", async () => {
+    let value = JSON.stringify({
+      favoritePlaces: [
+        { name: "Farol", placeId: "a", destinationId: "morro-de-sao-paulo" },
+        { name: "Farol", placeId: "b", destinationId: "morro-de-sao-paulo" },
+      ],
+    });
+    const handlers = createAssistantBrowserDomainHandlers({
+      storage: {
+        getItem: () => value,
+        setItem: (_key, next) => {
+          value = next;
+        },
+      },
+    });
+    const response = await handlers.favorites?.(
+      request("favorites", "Farol", "remover dos favoritos"),
+    );
+    expect(response?.metadata?.state).toBe("awaiting_place");
+    expect(JSON.parse(value).favoritePlaces).toHaveLength(2);
+  });
+
   it("adds, lists and removes a favorite through the same profile instance", async () => {
     const store = new Map<string, string>();
     const storage = {
