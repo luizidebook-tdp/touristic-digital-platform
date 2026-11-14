@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "MD-CRM-STORAGE-OWNERSHIP-20261114",
   "objective": "assign-exact-crm-storage-source-and-test-to-existing-auth-authority-without-lowering-risk-or-proof",
-  "baseSha": "3089c96380dd813a05282f3d20eb45e168b318e5",
+  "baseSha": "9a081ed470d0bdc9820ed37862100e7e962c94ff",
   "branch": "infra/acquire-crm-storage-ownership-20261114",
   "state": "IMPLEMENTING",
   "risk": "high",
