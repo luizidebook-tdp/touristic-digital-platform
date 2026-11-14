@@ -110,6 +110,40 @@ describe("assistant V1 user profile", () => {
     ]);
   });
 
+  it("scopes canonical identity to destination and preserves name-only legacy records", () => {
+    const storage = memoryStorage();
+    const manager = createAssistantUserProfileManager({ storage });
+    const a = {
+      name: "Farol",
+      placeId: "a",
+      destinationId: "morro-de-sao-paulo",
+    };
+    const b = { ...a, placeId: "b" };
+    const c = { ...a, destinationId: "itacare" };
+    for (const place of [
+      { name: "Farol" },
+      a,
+      b,
+      c,
+      { ...a, name: "Farol novo" },
+    ])
+      manager.addFavoritePlace(place);
+    expect(manager.getFavoritePlaces()).toHaveLength(4);
+    manager.removeFavoritePlace("Farol");
+    expect(manager.getFavoritePlaces()).toHaveLength(3);
+    manager.removeFavoritePlace({ ...a, name: "Renamed" });
+    expect(manager.getFavoritePlaces()).toEqual([
+      expect.objectContaining(b),
+      expect.objectContaining(c),
+    ]);
+    expect(
+      createAssistantUserProfileManager({ storage }).getFavoritePlaces(),
+    ).toEqual(manager.getFavoritePlaces());
+    manager.recordInteraction("visit", null, b);
+    manager.recordInteraction("visit", null, c);
+    expect(manager.getRecentPlaces()).toHaveLength(2);
+  });
+
   it("produces resident suggestions and a profile summary without provider secrets", () => {
     const manager = createAssistantUserProfileManager({
       now: () => new Date("2026-08-09T14:00:00Z").getTime(),

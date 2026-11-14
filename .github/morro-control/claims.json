@@ -83,21 +83,6 @@
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-09T09:06:31.931Z"
     },
-    "MD-ASSISTANT-PROFILE-OWNERSHIP-20261112": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "chore/assistant-profile-ownership-20261112",
-      "baseSha": "77fe1c697a0b68f2c11d4be58208675627162482",
-      "paths": [
-        ".morro/changesets/MD-ASSISTANT-PROFILE-OWNERSHIP-20261112.json",
-        ".morro/ownership.json",
-        "tooling/fabric/ownership-path.test.mjs"
-      ],
-      "domains": ["ci-release"],
-      "risk": "P1",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-13T23:00:00.000Z"
-    },
     "MD-ASSISTANT-PROFILE-IMPACT-20261112": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
@@ -117,7 +102,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "fix/d02-a01-reconciled-20261113",
-      "baseSha": "c7d20a8c34e97203b6844d7bfd32e925f76b4bac",
+      "baseSha": "8339f1f1fbe028fc9e6c9afc1ece4c99fad86cea",
       "paths": [
         "apps/morro-digital-platform/tooling/ticketing-operator-authorization.test.mjs",
         "services/ticketing/src/commerce-public-http-transport.test.ts",
