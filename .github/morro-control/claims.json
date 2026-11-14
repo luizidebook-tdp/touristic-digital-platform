@@ -97,6 +97,21 @@
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-13T23:00:00.000Z"
+    },
+    "MD-CRM-STORAGE-OWNERSHIP-20261114": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "infra/acquire-crm-storage-ownership-20261114",
+      "baseSha": "31896714caeb01ca44b735639706cf3294bcc797",
+      "paths": [
+        ".morro/ownership.json",
+        "tooling/fabric/ownership-path.test.mjs",
+        ".morro/changesets/MD-CRM-STORAGE-OWNERSHIP-20261114.json"
+      ],
+      "domains": ["ci-release"],
+      "risk": "P1",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-15T23:00:00.000Z"
     }
   }
 }
