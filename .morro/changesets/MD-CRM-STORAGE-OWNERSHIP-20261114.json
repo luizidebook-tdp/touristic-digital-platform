@@ -4,7 +4,7 @@
   "objective": "assign-exact-crm-storage-source-and-test-to-existing-auth-authority-without-lowering-risk-or-proof",
   "baseSha": "4ebd934d7abcde8f4d34095e860331d1f561818c",
   "branch": "infra/acquire-crm-storage-ownership-20261114",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {
