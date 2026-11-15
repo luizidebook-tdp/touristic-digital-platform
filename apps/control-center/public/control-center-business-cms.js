@@ -508,6 +508,10 @@ function detailTabs(detail, escapeHtml, canMutate) {
         <div class="callout">
           <strong>Catálogo governado:</strong> criações e edições avançam a revisão editável do Place.
           A projeção pública só muda depois de revisão + publicação.
+          Novos produtos, ofertas e cardápios são criados como rascunho; novos itens ficam indisponíveis.
+          Depois de criar, clique em Editar no item, selecione Ativo (ou Disponível) e salve.
+          Para mostrar uma oferta, ative também o produto associado.
+          Por fim, solicite revisão e publique a empresa no painel acima.
         </div>
         <div class="grid stats">
           <article class="card stat"><span class="stat-label">Produtos</span><strong class="stat-value">${escapeHtml(catalog.productCount ?? products.length)}</strong></article>
@@ -537,7 +541,7 @@ function detailTabs(detail, escapeHtml, canMutate) {
               <label>Nome<input required name="name" maxlength="180" /></label>
               <label>Descrição<textarea name="description" rows="3"></textarea></label>
               <label>Tags<input name="tags" placeholder="sunset, experiência" /></label>
-              <label>Status<select name="status"><option value="draft">Draft</option><option value="active">Ativo</option><option value="inactive">Inativo</option><option value="archived">Arquivado</option></select></label>
+              <label>Status<select name="status" disabled><option value="draft">Draft</option><option value="active">Ativo</option><option value="inactive">Inativo</option><option value="archived">Arquivado</option></select></label>
               <button class="primary-button" type="submit">Salvar produto</button>
               <button class="secondary-button" type="reset">Novo</button>
             </form>
@@ -546,7 +550,7 @@ function detailTabs(detail, escapeHtml, canMutate) {
               <label>Produto<select required name="productId"><option value="">Selecione</option>${products.map((entry) => `<option value="${escapeHtml(entry.id)}">${escapeHtml(entry.name)}</option>`).join("")}</select></label>
               <label>Preço (R$)<input required name="price" inputmode="decimal" placeholder="150,00" /></label>
               <label>Capacidade<input name="capacity" type="number" min="0" step="1" /></label>
-              <label>Status<select name="status"><option value="draft">Draft</option><option value="active">Ativa</option><option value="paused">Pausada</option><option value="sold_out">Esgotada</option><option value="expired">Expirada</option><option value="archived">Arquivada</option></select></label>
+              <label>Status<select name="status" disabled><option value="draft">Draft</option><option value="active">Ativa</option><option value="paused">Pausada</option><option value="sold_out">Esgotada</option><option value="expired">Expirada</option><option value="archived">Arquivada</option></select></label>
               <button class="primary-button" type="submit" ${products.length ? "" : "disabled"}>Salvar oferta</button>
               <button class="secondary-button" type="reset">Nova</button>
             </form>
@@ -554,7 +558,7 @@ function detailTabs(detail, escapeHtml, canMutate) {
               <h3>Novo cardápio</h3>
               <label>Nome<input required name="name" maxlength="180" /></label>
               <label>Descrição<textarea name="description" rows="3"></textarea></label>
-              <label>Status<select name="status"><option value="draft">Draft</option><option value="active">Ativo</option><option value="inactive">Inativo</option><option value="archived">Arquivado</option></select></label>
+              <label>Status<select name="status" disabled><option value="draft">Draft</option><option value="active">Ativo</option><option value="inactive">Inativo</option><option value="archived">Arquivado</option></select></label>
               <label>Media ID<input name="fallbackMediaId" /></label>
               <button class="primary-button" type="submit">Salvar menu</button>
               <button class="secondary-button" type="reset">Novo</button>
@@ -578,7 +582,7 @@ function detailTabs(detail, escapeHtml, canMutate) {
               <label>Alérgenos<input name="allergens" /></label>
               <label>Ordem<input name="sortOrder" type="number" min="0" step="1" value="0" /></label>
               <label>Media ID<input name="mediaId" /></label>
-              <label><input type="checkbox" name="available" value="true" /> Disponível</label>
+              <label><input type="checkbox" name="available" value="true" disabled /> Disponível</label>
               <button class="primary-button" type="submit" ${menus.length && menuCategories.length ? "" : "disabled"}>Salvar item</button>
               <button class="secondary-button" type="reset">Novo</button>
             </form>
@@ -789,6 +793,19 @@ function bindList(root, ctx, model) {
     });
 
   void model;
+}
+
+function setCatalogEditingMode(form, editing) {
+  for (const name of ["status", "available"]) {
+    if (form.elements[name]) form.elements[name].disabled = !editing;
+  }
+  const heading = form.querySelector("h3");
+  if (heading) {
+    heading.dataset.createLabel ??= heading.textContent;
+    heading.textContent = editing
+      ? "Editar item existente"
+      : heading.dataset.createLabel;
+  }
 }
 
 function bindDetail(root, ctx, detail) {
@@ -1046,6 +1063,7 @@ function bindDetail(root, ctx, detail) {
   for (const form of root.querySelectorAll("[data-business-catalog-kind]")) {
     form.addEventListener("reset", () => {
       delete form.dataset.catalogEntryId;
+      setCatalogEditingMode(form, false);
     });
     form.addEventListener("submit", async (event) => {
       if (ctx.isCurrent?.() === false) return;
@@ -1085,7 +1103,11 @@ function bindDetail(root, ctx, detail) {
         if (ctx.isCurrent?.() === false) return;
         ctx.content.querySelector('[data-business-cms-tab="catalog"]')?.click();
         ctx.content.querySelector("#business-cms-catalog-result").textContent =
-          "Catálogo salvo como revisão editável; publique para alterar o público.";
+          entryId
+            ? "Catálogo salvo como revisão editável; solicite revisão e publique para alterar o público."
+            : kind === "menu-category"
+              ? "Catálogo salvo como revisão editável. Categoria criada; revise os itens disponíveis e publique a empresa quando estiver pronta."
+              : "Catálogo salvo como revisão editável. Novo item criado em rascunho ou indisponível. Clique em Editar para ativá-lo; depois solicite revisão e publique a empresa.";
       } catch (error) {
         if (ctx.isCurrent?.() === false) return;
         result.textContent =
@@ -1104,6 +1126,7 @@ function bindDetail(root, ctx, detail) {
       const form = root.querySelector(`[data-business-catalog-kind="${kind}"]`);
       if (!entry || !form) return;
       form.dataset.catalogEntryId = entryId;
+      setCatalogEditingMode(form, true);
       const set = (name, value) => {
         if (form.elements[name]) form.elements[name].value = value ?? "";
       };

@@ -11,6 +11,50 @@ const source = readFileSync(
 );
 
 describe("Control Center Business CMS contract", () => {
+  it("does not offer ignored active or available values when creating catalogue items", () => {
+    const markup = String(
+      runInNewContext(
+        source.replace(/^export /gm, "") +
+          '\n detailTabs({businessId:"toca"}, String, true)',
+      ),
+    );
+    expect(markup.match(/name="status" disabled/g)).toHaveLength(3);
+    expect(markup).toContain('name="available" value="true" disabled');
+    expect(markup).toContain(
+      "Novos produtos, ofertas e cardápios são criados como rascunho",
+    );
+    expect(markup).toContain("ative também o produto associado");
+  });
+
+  it("enables explicit activation only in edit mode and restores creation mode on reset", () => {
+    const heading = {
+      textContent: "Novo produto",
+      dataset: {} as Record<string, string>,
+    };
+    const form = {
+      elements: { status: { disabled: true }, available: { disabled: true } },
+      querySelector: () => heading,
+    };
+    const sandbox = { form };
+    runInNewContext(
+      source.replace(/^export /gm, "") + "\n setCatalogEditingMode(form, true)",
+      sandbox,
+    );
+    expect(form.elements.status.disabled).toBe(false);
+    expect(form.elements.available.disabled).toBe(false);
+    expect(heading.textContent).toBe("Editar item existente");
+    runInNewContext(
+      source.replace(/^export /gm, "") +
+        "\n setCatalogEditingMode(form, false)",
+      { form },
+    );
+    expect(form.elements.status.disabled).toBe(true);
+    expect(form.elements.available.disabled).toBe(true);
+    expect(heading.textContent).toBe("Novo produto");
+    expect(source).toContain("setCatalogEditingMode(form, false)");
+    expect(source).toContain("setCatalogEditingMode(form, true)");
+  });
+
   it("requires separate review and publish requests and sends the editable revision", async () => {
     const calls: Array<{ action: string; expectedRevision: number }> = [];
     const result = { textContent: "" };
