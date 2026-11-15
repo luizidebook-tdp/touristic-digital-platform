@@ -175,7 +175,7 @@ export const placeActionRegistry: readonly PlaceActionDefinition[] =
     },
     {
       id: "products",
-      categoryApplicability: ["shops"],
+      categoryApplicability: CATEGORY_ALL,
       requiredCapabilities: ["products"],
       priority: 45,
       presentation: "secondary",
@@ -511,7 +511,7 @@ function actionFor(
     case "offers": {
       const commerce = commerceAvailability(context, offers);
       if (!commerce || commerce.availability !== "available") return null;
-      value = `commerce:offers:${commerce.offerIds.join(",")}`;
+      // Browsing offers must not silently initiate checkout. Tickets retain their explicit purchase CTA.
       break;
     }
     case "info":

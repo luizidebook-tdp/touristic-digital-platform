@@ -1,3 +1,5 @@
+import type { PublicPlaceCommerceProjection } from "@touristic/business";
+import { publicPlaceCatalogText } from "./public-place-catalog-presentation.js";
 import { groupProjectedMarkers } from "./explore-marker-grouping.js";
 import {
   getAssistantMainMenu,
@@ -558,6 +560,7 @@ export function installExploreLocationsControl({
         location: ExploreMapLocation;
         categoryLabel: string;
         description: string;
+        commerce?: PublicPlaceCommerceProjection | null;
         locale: AssistantLocale;
       }>
     | undefined;
@@ -1585,7 +1588,14 @@ export function installExploreLocationsControl({
       !activePlaceDetail ||
       activePlaceDetail.location !== activePlaceLocation ||
       activePlaceDetail.locale !== currentLocale() ||
-      value !== `place-action:info:${activePlaceDetail.placeId}`
+      (value.startsWith("place-action:info:") &&
+        !activePlaceDetail.description.trim()) ||
+      ![
+        `place-action:info:${activePlaceDetail.placeId}`,
+        `place-action:menu:${activePlaceDetail.placeId}`,
+        `place-action:products:${activePlaceDetail.placeId}`,
+        `place-action:offers:${activePlaceDetail.placeId}`,
+      ].includes(value)
     ) {
       return undefined;
     }
@@ -1608,9 +1618,19 @@ export function installExploreLocationsControl({
       }
       return;
     }
-    if (value.startsWith("place-action:info:")) {
+    if (
+      ["info", "menu", "products", "offers"].some((kind) =>
+        value.startsWith(`place-action:${kind}:`),
+      )
+    ) {
       const detail = readActivePlaceDetail(value);
-      if (detail) {
+      if (detail && activePlaceActionValues.includes(value)) {
+        const kind = value.split(":")[1];
+        if (kind === "info" && !detail.description.trim()) return;
+        const description =
+          kind === "menu" || kind === "products" || kind === "offers"
+            ? publicPlaceCatalogText(kind, detail.commerce, detail.locale)
+            : detail.description;
         const conversation = getAssistantConversationOrchestrator(document);
         // Repeating an explicit action still supersedes a pending answer,
         // even when the conversation deduplicates the unchanged details turn.
@@ -1629,7 +1649,7 @@ export function installExploreLocationsControl({
             selectedPlaceId: detail.placeId,
           },
           entities: { placeId: detail.placeId },
-          renderedText: detail.description,
+          renderedText: description,
           priority: "explicit",
         });
         renderPlaceDetailMessage(
@@ -1991,15 +2011,14 @@ export function installExploreLocationsControl({
             detail.profile.description,
             detail.profile.shortDescription,
           ].find((text) => typeof text === "string" && text.trim());
-          if (detailDescription) {
-            activePlaceDetail = Object.freeze({
-              placeId: canonicalPlaceId,
-              location: presentationLocation,
-              categoryLabel,
-              description: detailDescription.trim(),
-              locale,
-            });
-          }
+          activePlaceDetail = Object.freeze({
+            placeId: canonicalPlaceId,
+            location: presentationLocation,
+            categoryLabel,
+            description: detailDescription?.trim() ?? "",
+            commerce: detail.commerce,
+            locale,
+          });
           const canonicalActions = detail.actions.secondaryActions.map(
             (action) =>
               Object.freeze({
@@ -2033,11 +2052,13 @@ export function installExploreLocationsControl({
             locale,
           );
           if (
-            detailDescription &&
             refreshSequence !== undefined &&
             conversation.isCurrentSequence(refreshSequence)
           ) {
-            handlePlaceAction(`place-action:info:${canonicalPlaceId}`);
+            handlePlaceAction(
+              previousTurn?.userAction ??
+                `place-action:info:${canonicalPlaceId}`,
+            );
           }
         }
       } catch {

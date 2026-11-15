@@ -2335,6 +2335,10 @@ html[dir="rtl"]
   line-height: var(--md-line-height-body);
 }
 
+#unified-assistant-dock .md-assistant-place-detail-description {
+  white-space: pre-line;
+}
+
 #unified-assistant-dock > #home-bottom-navigation.md-home-bottom-nav {
   position: static !important;
   inset: auto !important;
