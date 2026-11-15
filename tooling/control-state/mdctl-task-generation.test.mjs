@@ -183,7 +183,7 @@ function fixture(
   const provider = {
     main,
     pull,
-    owner: { id: 19, login: "luizanunciostoca", type: "User" },
+    owner: { id: 19, login: "luizidebook-tdp", type: "User" },
     comments: [],
   };
   const api = async (path) => {
@@ -1011,3 +1011,40 @@ for (const phase of ["prepare", "prove"])
         },
         /JOURNAL_CHANGED/,
       ));
+
+// Repository migration regression: legacy identity is never accepted implicitly.
+test("generation is bound to the current repository", () => {
+  assert.equal(
+    GENERATION_REPOSITORY,
+    "luizidebook-tdp/touristic-digital-platform",
+  );
+});
+
+for (const side of ["head", "base"])
+  test(`legacy ${side} repository cannot authorize generation`, async (t) => {
+    const f = fixture(t);
+    f.provider.pull[side].repo.full_name =
+      "luizanunciostoca/touristic-digital-platform";
+    await assert.rejects(f.capture(), /PR_IDENTITY/);
+    assertExists(join(f.state, "generations"), false);
+  });
+
+test("legacy owner cannot authorize missing-history generation", async (t) => {
+  const { f, request } = await missingRequest(t);
+  f.approve(request);
+  f.provider.owner.login = "luizanunciostoca";
+  await assert.rejects(f.prepare(request), /REPOSITORY_OWNER/);
+  assertExists(join(f.state, "generations"), false);
+});
+
+for (const field of ["issue_url", "html_url"])
+  test(`legacy approval ${field} is rejected`, async (t) => {
+    const { f, request } = await missingRequest(t);
+    f.approve(request);
+    f.provider.comments[0][field] = f.provider.comments[0][field].replace(
+      "luizidebook-tdp/",
+      "luizanunciostoca/",
+    );
+    await assert.rejects(f.prepare(request), /OWNER_COMMENT_TARGET/);
+    assertExists(join(f.state, "generations"), false);
+  });
