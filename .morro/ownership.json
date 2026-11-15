@@ -196,7 +196,9 @@
         "apps/morro-digital-platform/tooling/control-center-home-overview-v1-browser-contract.cjs",
         "apps/morro-digital-platform/tooling/control-center-visual-golden-v1-browser-contract.cjs",
         "apps/morro-digital-platform/tooling/auth-api.mjs",
-        "apps/morro-digital-platform/tooling/auth-api-logout.test.mjs"
+        "apps/morro-digital-platform/tooling/auth-api-logout.test.mjs",
+        "services/crm/src/crm-storage-adapter.ts",
+        "services/crm/src/crm-storage-adapter.test.ts"
       ],
       "contracts": ["platform-authz"]
     },
