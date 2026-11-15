@@ -1,0 +1,30 @@
+{
+  "purpose": "WIP_BACKUP_ONLY_NOT_FOR_MERGE",
+  "baseHead": "daa22bd257d4ddfede5f4afcb1212d2380b81f9d",
+  "files": [
+    {
+      "path": "tooling/mdctl/task-generation.mjs",
+      "sha256": "9b0eddedf474188ad2574e01b6b7cb538155ad0a4e064871e2a84a4253f9521c",
+      "bytes": 46531
+    },
+    {
+      "path": "tooling/control-state/mdctl-task-generation.test.mjs",
+      "sha256": "6d66634345913ede4b1018763481c2f243ed0626ef5585404add1de6607362ac",
+      "bytes": 53283
+    },
+    {
+      "path": "tooling/mdctl/task-generation.md",
+      "sha256": "e0fd145dd8ce95aa2f99dd2957f1a51d13edf6450298130d85801311f0261393",
+      "bytes": 5629
+    }
+  ],
+  "observedTests": {
+    "newContractTestsPassed": 152,
+    "skipped": 0
+  },
+  "operationalInvocationPerformed": false,
+  "claimRetirementPerformed": false,
+  "globalWriterInventoryClosed": false,
+  "canonicalStopReceipt": false,
+  "note": "Preserves the reconstructed work in progress only. No claim of operational authorization, remote gates, merge, deployment or stopped third-party writers."
+}

@@ -379,6 +379,16 @@ export async function verifyGenerationOwner(
       clock() < Date.parse(request.expiresAt),
     "REQUEST_EXPIRED",
   );
+  const suffix = `${request.claimId}:${generationDigest(request)}:${request.nonce}:${request.mainSha}`;
+  const approval = "APPROVED_TASK_GENERATION:" + suffix;
+  const revocation = "REVOKED_TASK_GENERATION:" + suffix;
+  return readPersonalOwnerDecision(
+    { ...request, approval, revocation },
+    { api, clock },
+  );
+}
+async function readPersonalOwnerDecision(request, { api, clock }) {
+  const { approval, revocation } = request;
   const remote = "repos/" + GENERATION_REPOSITORY;
   const repo = await api(remote);
   check(
@@ -389,9 +399,6 @@ export async function verifyGenerationOwner(
       repo.owner.login === GENERATION_REPOSITORY.split("/")[0],
     "REPOSITORY_OWNER",
   );
-  const suffix = `${request.claimId}:${generationDigest(request)}:${request.nonce}:${request.mainSha}`;
-  const approval = "APPROVED_TASK_GENERATION:" + suffix;
-  const revocation = "REVOKED_TASK_GENERATION:" + suffix;
   async function readDecision() {
     const found = [];
     for (let page = 1; page <= 10; page++) {
@@ -770,6 +777,12 @@ export async function prepareGeneration(options, request, dependencies = {}) {
     validateRequest(request, recaptured);
     await preserveOwnerDecision(request, ownerDecision, { api, clock });
     finalFence(capture, request, clock);
+    await maintenanceFence(
+      dependencies.maintenance,
+      recaptured,
+      "prepare",
+      "reserve",
+    );
     const preimages = Object.fromEntries(
       [RP, EP, capture.mp].map((p) => [p, regular(join(capture.workspace, p))]),
     );
@@ -778,6 +791,13 @@ export async function prepareGeneration(options, request, dependencies = {}) {
       "intent.json": bytes({
         request,
         ownerDecision,
+        ...(dependencies.maintenance
+          ? {
+              maintenanceDigest: generationDigest(
+                dependencies.maintenance.envelope,
+              ),
+            }
+          : {}),
         files: capture.files,
         preimages,
       }),
@@ -801,8 +821,19 @@ export async function prepareGeneration(options, request, dependencies = {}) {
       { api, clock },
     );
     validateRequest(request, terminal);
+    await maintenanceFence(
+      dependencies.maintenance,
+      terminal,
+      "prepare",
+      "prewrite",
+    );
     const projectedAt = new Date(clock()).toISOString();
     const after = await metadataProjection(capture, preimages, projectedAt);
+    if (dependencies.maintenance) {
+      same(after[RP], preimages[RP], "MAINTENANCE_REGISTRY_PROJECTION");
+      same(after[EP], preimages[EP], "MAINTENANCE_LEDGER_PROJECTION");
+      maintenanceTime(dependencies.maintenance, capture);
+    }
     finalFence(capture, request, clock);
     verifyFiles(capture.workspace, preimages, "PREIMAGE_CHANGED");
     appendJournal(directory, journal, "prepared.json", {
@@ -826,6 +857,33 @@ export async function prepareGeneration(options, request, dependencies = {}) {
     }
     verifyFiles(capture.workspace, after, "TERMINAL_WRITE_READBACK");
     preserveJournal(directory, journal);
+    await maintenanceFinish(
+      dependencies.maintenance,
+      terminal,
+      "prepare",
+      () => {
+        verifyFiles(capture.workspace, after, "MAINTENANCE_TERMINAL_METADATA");
+        preserveJournal(directory, journal);
+        preserveSource(capture);
+        same(
+          execFileSync(
+            "git",
+            [
+              "--no-optional-locks",
+              "-C",
+              capture.workspace,
+              "status",
+              "--porcelain=v1",
+              "-z",
+              "--untracked-files=all",
+            ],
+            { encoding: "utf8", timeout: 30000, maxBuffer: 8 * 1024 * 1024 },
+          ),
+          " M " + capture.mp + "\0",
+          "MAINTENANCE_TERMINAL_SCOPE",
+        );
+      },
+    );
     return {
       state: "PREPARED_REQUIRES_FINAL_PROOF",
       directory: directory,
@@ -857,6 +915,21 @@ export async function proveGeneration(options, nonce, dependencies = {}) {
   const intent = JSON.parse(journal["intent.json"]),
     prepared = JSON.parse(journal["prepared.json"]);
   const request = intent.request;
+  if (intent.maintenanceDigest !== undefined) {
+    check(
+      maintenanceSessions.has(dependencies.maintenance),
+      "MAINTENANCE_ADMISSION_REQUIRED",
+    );
+    same(
+      intent.maintenanceDigest,
+      generationDigest(dependencies.maintenance.envelope),
+      "MAINTENANCE_JOURNAL_BINDING",
+    );
+  } else
+    check(
+      dependencies.maintenance === undefined,
+      "MAINTENANCE_JOURNAL_REQUIRED",
+    );
   const preliminary = JSON.parse(journal["preliminary-proof.json"]);
   const capture = await captureGeneration(options, { api, clock });
   await validateJournal(capture, nonce, intent, prepared, preliminary);
@@ -876,6 +949,12 @@ export async function proveGeneration(options, nonce, dependencies = {}) {
     await preserveOwnerDecision(request, intent.ownerDecision, { api, clock });
     const recaptured = await captureGeneration(options, { api, clock });
     sameCapture(recaptured, capture);
+    await maintenanceFence(
+      dependencies.maintenance,
+      recaptured,
+      "prove",
+      "prewrite",
+    );
     preserveJournal(directory, journal);
     await validateJournal(recaptured, nonce, intent, prepared, preliminary);
     const final = await boundedProof(
@@ -892,28 +971,454 @@ export async function proveGeneration(options, nonce, dependencies = {}) {
       { api, clock },
     );
     await validateJournal(terminal, nonce, intent, prepared, preliminary);
+    await maintenanceFence(
+      dependencies.maintenance,
+      terminal,
+      "prove",
+      "prewrite",
+    );
     finalFence(capture, request, clock);
     appendJournal(directory, journal, "final-proof.json", {
-      state: "FINAL_PROVEN",
+      ...(dependencies.maintenance
+        ? {
+            maintenanceDigest: generationDigest(
+              dependencies.maintenance.envelope,
+            ),
+          }
+        : {}),
+      state: dependencies.maintenance
+        ? "MAINTENANCE_PROOF_REQUIRES_RECEIPT"
+        : "FINAL_PROVEN",
       requestDigest: generationDigest(request),
       mainSha: capture.mainSha,
       candidateSha: capture.observed.headSha,
       treeSha: capture.observed.treeSha,
       ...final,
     });
+    await maintenanceFinish(dependencies.maintenance, terminal, "prove", () => {
+      same(
+        identity(capture.workspace, capture.mainSha),
+        capture.observed,
+        "MAINTENANCE_TERMINAL_IDENTITY",
+      );
+      verifyFiles(
+        capture.workspace,
+        prepared.after,
+        "MAINTENANCE_TERMINAL_METADATA",
+      );
+      preserveJournal(directory, journal);
+      preserveSource(capture);
+    });
     return {
-      state: "FINAL_PROVEN",
+      state: dependencies.maintenance
+        ? "MAINTENANCE_FINAL_PROVEN"
+        : "FINAL_PROVEN",
       directory,
       mainSha: capture.mainSha,
       candidateSha: capture.observed.headSha,
       treeSha: capture.observed.treeSha,
+      ...(dependencies.maintenance
+        ? {
+            maintenanceReceipt: maintenancePaths(dependencies.maintenance)
+              .complete,
+          }
+        : {}),
       localProofDigest: final.localProof.digest,
       remoteProofAccepted: false,
     };
   });
 }
 
+// Narrow, explicit admission for the repository-identity repair only. This is
+// not an override for ordinary generation and does not authorize merge/deploy.
+const MAINTENANCE = Object.freeze({
+  claimId: "MD-TASK-GENERATION-REPOSITORY-20261114",
+  branch: "infra/acquire-task-generation-repository-20261114",
+  prNumber: 23,
+  legacyEntryBlob: "406ed48a403fb2aaefd71021f900a459c94108e5",
+});
+const maintenanceSessions = new WeakSet();
+function closed(value, keys, code) {
+  check(value && Object.getPrototypeOf(value) === Object.prototype, code);
+  same(Object.keys(value).sort(), [...keys].sort(), code);
+}
+function maintenanceShape(envelope, clock) {
+  closed(
+    envelope,
+    [
+      "schemaVersion",
+      "kind",
+      "repository",
+      "claimId",
+      "prNumber",
+      "generationRequest",
+      "executorSha",
+      "executorTree",
+      "executorPath",
+      "executorSourceSha256",
+      "noOtherWritersAttested",
+      "unintegratedExecutorAcknowledged",
+      "issuedAt",
+      "expiresAt",
+      "nonce",
+    ],
+    "MAINTENANCE_SHAPE",
+  );
+  const r = envelope.generationRequest;
+  check(r && r.mode === "HISTORY", "MAINTENANCE_HISTORY_ONLY");
+  same(envelope.schemaVersion, 1, "MAINTENANCE_VERSION");
+  same(envelope.kind, "TDP_REPOSITORY_REPAIR_MAINTENANCE", "MAINTENANCE_KIND");
+  same(envelope.repository, GENERATION_REPOSITORY, "MAINTENANCE_REPOSITORY");
+  same(envelope.claimId, MAINTENANCE.claimId, "MAINTENANCE_CLAIM");
+  same(envelope.prNumber, MAINTENANCE.prNumber, "MAINTENANCE_PR");
+  same(r.repository, envelope.repository, "MAINTENANCE_REPOSITORY");
+  same(r.claimId, envelope.claimId, "MAINTENANCE_CLAIM");
+  same(r.prNumber, envelope.prNumber, "MAINTENANCE_PR");
+  same(r.branch, MAINTENANCE.branch, "MAINTENANCE_BRANCH");
+  same(
+    r.authority,
+    "CANONICAL_CLAIM_AND_TASK_HISTORY",
+    "MAINTENANCE_AUTHORITY",
+  );
+  same(
+    envelope.noOtherWritersAttested,
+    true,
+    "MAINTENANCE_WRITERS_ATTESTATION",
+  );
+  same(
+    envelope.unintegratedExecutorAcknowledged,
+    true,
+    "MAINTENANCE_SOURCE_ACK",
+  );
+  for (const name of ["executorSha", "executorTree"])
+    check(SHA.test(envelope[name]), "MAINTENANCE_SHA");
+  check(
+    /^[a-f0-9]{64}$/u.test(envelope.executorSourceSha256),
+    "MAINTENANCE_SOURCE_DIGEST",
+  );
+  same(envelope.executorSha, r.candidateSha, "MAINTENANCE_EXECUTOR_CANDIDATE");
+  same(envelope.executorTree, r.treeSha, "MAINTENANCE_EXECUTOR_TREE");
+  same(envelope.nonce, r.nonce, "MAINTENANCE_NONCE");
+  check(/^[a-f0-9-]{32,36}$/u.test(envelope.nonce), "MAINTENANCE_NONCE");
+  for (const k of ["issuedAt", "expiresAt"]) {
+    check(
+      typeof envelope[k] === "string" &&
+        Number.isFinite(Date.parse(envelope[k])),
+      "MAINTENANCE_TIME",
+    );
+    same(envelope[k], r[k], "MAINTENANCE_TIME_BINDING");
+  }
+  const issued = Date.parse(envelope.issuedAt),
+    expires = Date.parse(envelope.expiresAt);
+  check(
+    issued <= clock() &&
+      clock() < expires &&
+      expires > issued &&
+      expires - issued <= 1800000,
+    "MAINTENANCE_EXPIRED",
+  );
+}
+export async function verifyMaintenanceOwner(
+  envelope,
+  { api = githubApi, clock = Date.now } = {},
+) {
+  maintenanceShape(envelope, clock);
+  return readPersonalOwnerDecision(
+    {
+      prNumber: envelope.prNumber,
+      issuedAt: envelope.issuedAt,
+      approval: "APPROVED_EXECUTOR_MAINTENANCE:" + generationDigest(envelope),
+      revocation: "REVOKED_EXECUTOR_MAINTENANCE:" + generationDigest(envelope),
+    },
+    { api, clock },
+  );
+}
+function maintenanceSource(session) {
+  const e = session.envelope,
+    r = e.generationRequest;
+  same(
+    realpathSync(e.executorPath),
+    session.authorityRoot,
+    "MAINTENANCE_SOURCE_PATH",
+  );
+  check(
+    session.authorityRoot !== realpathSync(session.options.workspace),
+    "MAINTENANCE_SEPARATE_SOURCE",
+  );
+  const id = identity(session.authorityRoot, r.mainSha);
+  same(id.headSha, e.executorSha, "MAINTENANCE_SOURCE_HEAD");
+  same(id.treeSha, e.executorTree, "MAINTENANCE_SOURCE_TREE");
+  same(id.dirty, false, "MAINTENANCE_SOURCE_DIRTY");
+  same(id.baseIsAncestor, true, "MAINTENANCE_SOURCE_ANCESTRY");
+  // The entire reviewed source tree is fixed, not only the entry file.
+  same(
+    hash(regular(join(session.authorityRoot, ENTRY))),
+    e.executorSourceSha256,
+    "MAINTENANCE_SOURCE_DIGEST",
+  );
+  same(
+    hash(regular(fileURLToPath(import.meta.url))),
+    e.executorSourceSha256,
+    "MAINTENANCE_LOADED_SOURCE",
+  );
+  same(
+    git(session.authorityRoot, "rev-parse", r.mainSha + ":" + ENTRY),
+    MAINTENANCE.legacyEntryBlob,
+    "MAINTENANCE_NO_LONGER_APPLICABLE",
+  );
+}
+function maintenancePaths(session) {
+  const workspace = realpathSync(session.options.workspace);
+  const common = realpathSync(
+    resolve(workspace, git(workspace, "rev-parse", "--git-common-dir")),
+  );
+  const directory = join(common, "task-generation-maintenance");
+  if (existsSync(directory))
+    check(
+      realpathSync(directory) === directory &&
+        lstatSync(directory).isDirectory(),
+      "MAINTENANCE_DIRECTORY",
+    );
+  return {
+    directory,
+    reservation: join(directory, session.envelope.nonce + ".reservation.json"),
+    prepared: join(directory, session.envelope.nonce + ".prepared.json"),
+    complete: join(directory, session.envelope.nonce + ".complete.json"),
+  };
+}
+function maintenanceFinalIdentity(session, capture) {
+  const r = session.envelope.generationRequest,
+    root = capture.workspace;
+  same(
+    git(root, "show", "-s", "--format=%P", "HEAD"),
+    r.candidateSha,
+    "MAINTENANCE_SINGLE_COMMIT",
+  );
+  same(
+    git(root, "diff", "--name-only", r.candidateSha, "HEAD"),
+    capture.mp,
+    "MAINTENANCE_FINAL_SCOPE",
+  );
+  same(
+    JSON.parse(at(root, "HEAD", capture.mp)),
+    {
+      ...JSON.parse(at(root, r.candidateSha, capture.mp)),
+      state: "LOCAL_PROVEN",
+    },
+    "MAINTENANCE_FINAL_PROJECTION",
+  );
+  const mode = (sha) => git(root, "ls-tree", sha, capture.mp).split(" ")[0];
+  same(mode("HEAD"), mode(r.candidateSha), "MAINTENANCE_FILE_MODE");
+}
+function maintenanceTime(session, capture) {
+  maintenanceShape(session.envelope, session.clock);
+  check(
+    session.clock() < Date.parse(capture.claim.expiresAt),
+    "CLAIM_EXPIRED_DURING_PROOF",
+  );
+}
+async function maintenanceFence(session, capture, phase, stage) {
+  if (session === undefined) return;
+  check(maintenanceSessions.has(session), "MAINTENANCE_ADMISSION_REQUIRED");
+  const e = session.envelope,
+    r = e.generationRequest;
+  maintenanceShape(e, session.clock);
+  maintenanceSource(session);
+  same(capture.workspace, r.workspace, "MAINTENANCE_WORKSPACE");
+  same(capture.id, MAINTENANCE.claimId, "MAINTENANCE_CLAIM");
+  same(capture.mode, "HISTORY", "MAINTENANCE_HISTORY_ONLY");
+  same(capture.mainSha, r.mainSha, "MAINTENANCE_MAIN");
+  same(capture.manifest.baseSha, r.mainSha, "MAINTENANCE_ALREADY_REANCHORED");
+  check(
+    Date.parse(e.expiresAt) <= Date.parse(capture.claim.expiresAt),
+    "MAINTENANCE_CLAIM_EXPIRY",
+  );
+  same(
+    capture.providerIdentity.head.sha,
+    r.candidateSha,
+    "MAINTENANCE_REMOTE_HEAD",
+  );
+  same(
+    capture.files.map(({ name, sha256 }) => ({ name, sha256 })),
+    r.history,
+    "MAINTENANCE_HISTORY_CHANGED",
+  );
+  same(
+    await verifyMaintenanceOwner(e, { api: session.api, clock: session.clock }),
+    session.decision,
+    "MAINTENANCE_CONSENT_CHANGED",
+  );
+  const remote = "repos/" + GENERATION_REPOSITORY;
+  same(
+    (await session.api(remote + "/commits/main")).sha,
+    r.mainSha,
+    "MAINTENANCE_MAIN",
+  );
+  const pull = await session.api(remote + "/pulls/23");
+  check(
+    pull.state === "open" &&
+      pull.merged_at === null &&
+      pull.head?.sha === r.candidateSha &&
+      pull.head.ref === r.branch &&
+      pull.head.repo.full_name === GENERATION_REPOSITORY &&
+      pull.base?.repo?.full_name === GENERATION_REPOSITORY &&
+      pull.base.ref === "main" &&
+      pull.base.sha === r.mainSha,
+    "MAINTENANCE_PR_DRIFT",
+  );
+  same(
+    (
+      await session.api(
+        remote + "/git/ref/heads/" + encodeURIComponent(r.branch),
+      )
+    ).object?.sha,
+    r.candidateSha,
+    "MAINTENANCE_REMOTE_HEAD",
+  );
+  maintenanceTime(session, capture);
+  maintenanceSource(session);
+  preserveSource(capture);
+  same(
+    identity(capture.workspace, capture.mainSha),
+    { ...capture.observed, dirty: phase === "prepare" && stage === "terminal" },
+    "MAINTENANCE_TERMINAL_IDENTITY",
+  );
+  if (phase === "prepare")
+    same(capture.observed.headSha, r.candidateSha, "MAINTENANCE_INITIAL_HEAD");
+  else maintenanceFinalIdentity(session, capture);
+  maintenanceTime(session, capture);
+  const p = maintenancePaths(session);
+  const expected = { request: e, decision: session.decision };
+  if (stage === "reserve") {
+    check(!existsSync(p.reservation), "MAINTENANCE_NONCE_USED");
+    mkdirSync(p.directory, { recursive: true, mode: 0o700 });
+    const fd = openSync(dirname(p.directory), "r");
+    try {
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    check(realpathSync(p.directory) === p.directory, "MAINTENANCE_DIRECTORY");
+    durable(p.reservation, bytes(expected));
+  } else {
+    same(json(p.reservation), expected, "MAINTENANCE_RESERVATION_CHANGED");
+    if (phase === "prove") {
+      same(
+        json(p.prepared),
+        { requestDigest: generationDigest(e), initialHead: r.candidateSha },
+        "MAINTENANCE_PREPARE_REQUIRED",
+      );
+      check(!existsSync(p.complete), "MAINTENANCE_ALREADY_COMPLETE");
+    }
+  }
+}
+async function maintenanceFinish(session, capture, phase, finalReadback) {
+  if (session === undefined) return;
+  await maintenanceFence(session, capture, phase, "terminal");
+  finalReadback();
+  maintenanceTime(session, capture);
+  const p = maintenancePaths(session);
+  if (phase === "prepare")
+    durable(
+      p.prepared,
+      bytes({
+        requestDigest: generationDigest(session.envelope),
+        initialHead: session.envelope.generationRequest.candidateSha,
+      }),
+    );
+  else
+    durable(
+      p.complete,
+      bytes({
+        state: "MAINTENANCE_FINAL_PROVEN",
+        finalProofDigest: hash(
+          regular(
+            join(
+              generationPaths(capture, session.envelope.generationRequest)
+                .directory,
+              "final-proof.json",
+            ),
+          ),
+        ),
+        requestDigest: generationDigest(session.envelope),
+        finalHead: capture.observed.headSha,
+        finalTree: capture.observed.treeSha,
+        remoteProofAccepted: false,
+      }),
+    );
+}
+export async function runMaintenanceGeneration(
+  action,
+  options,
+  envelope,
+  {
+    api = githubApi,
+    clock = Date.now,
+    authorityRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../.."),
+  } = {},
+) {
+  check(["prepare", "prove"].includes(action), "MAINTENANCE_ACTION");
+  const frozen = JSON.parse(JSON.stringify(envelope));
+  maintenanceShape(frozen, clock);
+  same(
+    options,
+    {
+      workspace: frozen.generationRequest.workspace,
+      mainSha: frozen.generationRequest.mainSha,
+      prNumber: 23,
+      executor: frozen.generationRequest.executor,
+    },
+    "MAINTENANCE_OPTIONS",
+  );
+  const session = {
+    envelope: frozen,
+    api,
+    clock,
+    authorityRoot: realpathSync(authorityRoot),
+    options: { ...options },
+    decision: null,
+  };
+  maintenanceSource(session);
+  session.decision = await verifyMaintenanceOwner(frozen, { api, clock });
+  maintenanceSessions.add(session);
+  // No outer lock. The additional fence executes INSIDE the existing lock.
+  return action === "prepare"
+    ? prepareGeneration(options, frozen.generationRequest, {
+        api,
+        clock,
+        maintenance: session,
+      })
+    : proveGeneration(options, frozen.nonce, {
+        api,
+        clock,
+        maintenance: session,
+      });
+}
+
 async function main(args) {
+  if (["maintenance-prepare", "maintenance-prove"].includes(args[0])) {
+    check(args.length === 2, "MAINTENANCE_USAGE");
+    const envelope = json(args[1]),
+      r = envelope.generationRequest;
+    console.log(
+      JSON.stringify(
+        await runMaintenanceGeneration(
+          args[0].slice("maintenance-".length),
+          {
+            workspace: r.workspace,
+            mainSha: r.mainSha,
+            prNumber: r.prNumber,
+            executor: r.executor,
+          },
+          envelope,
+        ),
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
   const [action, workspace, mainSha, pr, executor, value] = args;
   check(
     ["inspect", "prepare", "prove"].includes(action) &&

@@ -22,7 +22,11 @@ import {
   proveGeneration,
   verifyGenerationOwner,
   GENERATION_REPOSITORY,
+  runMaintenanceGeneration,
+  verifyMaintenanceOwner,
 } from "../mdctl/task-generation.mjs";
+import { buildClaimReanchor } from "../mdctl/claim-lifecycle.mjs";
+import { createHash } from "node:crypto";
 import {
   buildTaskStart,
   buildTaskRestart,
@@ -73,10 +77,17 @@ async function missingRequest(t, { keepRegistry = false } = {}) {
 function fixture(
   t,
   {
+    maintenance = false,
     timeoutSeconds = 10,
     proof = "import assert from 'node:assert/strict'; assert.equal(2 + 2, 4);",
   } = {},
 ) {
+  const id = maintenance ? "MD-TASK-GENERATION-REPOSITORY-20261114" : ID;
+  const mp = ".morro/changesets/" + id + ".json";
+  const branch = maintenance
+    ? "infra/acquire-task-generation-repository-20261114"
+    : BRANCH;
+  const pr = maintenance ? 23 : 7;
   const root = mkdtempSync(join(tmpdir(), "tdp-generation-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const git = (...args) =>
@@ -97,23 +108,40 @@ function fixture(
   git("config", "user.name", "Fixture");
   git("config", "user.email", "fixture@example.invalid");
   write("tooling/proof.test.mjs", proof);
+  if (maintenance)
+    write(
+      "tooling/mdctl/task-generation.mjs",
+      execFileSync(
+        "git",
+        [
+          "show",
+          "0289975287ba4680deeac5681119caf6a254db71:tooling/mdctl/task-generation.mjs",
+        ],
+        { encoding: "utf8" },
+      ),
+    );
   write(
     RP,
     encode({ schemaVersion: 1, registryAuthority: "ORCHESTRATOR", claims: {} }),
   );
   write(EP, "");
   const initial = commit();
-  const manifest = {
+  let manifest = {
     schemaVersion: 2,
-    id: ID,
+    id: id,
     objective: "prove-bounded-generation-fixture",
     baseSha: initial,
-    branch: BRANCH,
+    branch: branch,
     state: "IMPLEMENTING",
     risk: "high",
     scope: "PLATFORM",
     owns: {
-      paths: [MP, "tooling/product.mjs", "tooling/proof.test.mjs"],
+      paths: [
+        mp,
+        "tooling/product.mjs",
+        "tooling/proof.test.mjs",
+        ...(maintenance ? ["tooling/mdctl/task-generation.mjs"] : []),
+      ],
       contracts: [],
     },
     reads: { contracts: ["MAIN"] },
@@ -146,7 +174,7 @@ function fixture(
   const claim = {
     owner: "CHATGPT-PRO-CONTROL",
     reviewer: "AUTOMATED-INDEPENDENT-PROOF",
-    branch: BRANCH,
+    branch: branch,
     baseSha: initial,
     paths: manifest.owns.paths,
     domains: ["ci-release"],
@@ -154,31 +182,69 @@ function fixture(
     status: "IMPLEMENTING",
     expiresAt: new Date(Date.now() + 86400000).toISOString(),
   };
-  write(MP, encode(manifest));
+  write(mp, encode(manifest));
   write(
     RP,
     encode({
       schemaVersion: 1,
       registryAuthority: "ORCHESTRATOR",
-      claims: { [ID]: claim },
+      claims: { [id]: claim },
     }),
   );
   const main = commit();
-  git("checkout", "-qb", BRANCH);
+  git("checkout", "-qb", branch);
+  if (maintenance) {
+    const transition = buildClaimReanchor({
+      registry: readJson(join(root, RP)),
+      ledgerText: readText(join(root, EP)),
+      manifest,
+      newBaseSha: main,
+      observedAt: new Date().toISOString(),
+    });
+    manifest = transition.manifest;
+    write(mp, encode(manifest));
+    write(RP, encode(transition.registry));
+    write(EP, transition.ledgerText);
+    execFileSync(
+      process.execPath,
+      [
+        fileURLToPath(
+          new URL(
+            "../../node_modules/prettier/bin/prettier.cjs",
+            import.meta.url,
+          ),
+        ),
+        "--write",
+        join(root, RP),
+        join(root, mp),
+      ],
+      { cwd: root, stdio: "pipe" },
+    );
+    write(
+      "tooling/mdctl/task-generation.mjs",
+      readText(
+        fileURLToPath(new URL("../mdctl/task-generation.mjs", import.meta.url)),
+      ),
+    );
+  }
   write("tooling/product.mjs", "export const product = 1;\n");
   commit();
   const head = git("rev-parse", "HEAD");
   const pull = {
-    number: 7,
+    number: pr,
     state: "open",
     merged_at: null,
     merge_commit_sha: null,
     head: {
       sha: head,
-      ref: BRANCH,
+      ref: branch,
       repo: { full_name: GENERATION_REPOSITORY },
     },
-    base: { ref: "main", repo: { full_name: GENERATION_REPOSITORY } },
+    base: {
+      ref: "main",
+      sha: main,
+      repo: { full_name: GENERATION_REPOSITORY },
+    },
   };
   const provider = {
     main,
@@ -194,10 +260,10 @@ function fixture(
         owner: provider.owner,
       });
     if (suffix === "/commits/main") return { sha: provider.main };
-    if (suffix === "/pulls/7") return structuredClone(provider.pull);
+    if (suffix === "/pulls/" + pr) return structuredClone(provider.pull);
     if (suffix.startsWith("/git/ref/heads/"))
       return { object: { sha: provider.pull.head.sha } };
-    if (suffix.startsWith("/issues/7/comments?")) {
+    if (suffix.startsWith("/issues/" + pr + "/comments?")) {
       const page = Number(suffix.match(/&page=(\d+)$/)[1]);
       return structuredClone(
         provider.comments.slice((page - 1) * 100, page * 100),
@@ -214,7 +280,7 @@ function fixture(
   const options = {
     workspace: root,
     mainSha: main,
-    prNumber: 7,
+    prNumber: pr,
     executor: OWNER,
   };
   const state = join(root, ".git/morro-control");
@@ -224,7 +290,7 @@ function fixture(
     changeSet: manifest,
     owner: OWNER,
     identity: {
-      branch: BRANCH,
+      branch: branch,
       headSha: head,
       treeSha: git("rev-parse", "HEAD^{tree}"),
       dirty: false,
@@ -235,8 +301,8 @@ function fixture(
   });
   mkdirSync(state, { recursive: true });
   for (const [name, value] of [
-    [ID + ".task.json", historical.task],
-    [ID + ".context-pack.json", historical.contextPack],
+    [id + ".task.json", historical.task],
+    [id + ".context-pack.json", historical.contextPack],
     ["capability-leases.json", historical.leaseRegistry],
   ])
     writeFileSync(join(state, name), encode(value));
@@ -259,14 +325,14 @@ function fixture(
       provider.comments = [
         {
           id: 31,
-          body: `APPROVED_TASK_GENERATION:${ID}:${generationDigest(request)}:${request.nonce}:${main}`,
+          body: `APPROVED_TASK_GENERATION:${id}:${generationDigest(request)}:${request.nonce}:${main}`,
           user: structuredClone(provider.owner),
           author_association: "OWNER",
           performed_via_github_app: null,
           created_at: time,
           updated_at: time,
-          issue_url: `https://api.github.com/repos/${GENERATION_REPOSITORY}/issues/7`,
-          html_url: `https://github.com/${GENERATION_REPOSITORY}/pull/7#issuecomment-31`,
+          issue_url: `https://api.github.com/repos/${GENERATION_REPOSITORY}/issues/${pr}`,
+          html_url: `https://github.com/${GENERATION_REPOSITORY}/pull/${pr}#issuecomment-31`,
         },
       ];
     },
@@ -1048,3 +1114,440 @@ for (const field of ["issue_url", "html_url"])
     await assert.rejects(f.prepare(request), /OWNER_COMMENT_TARGET/);
     assertExists(join(f.state, "generations"), false);
   });
+
+async function maintenanceFixture(t, opts = {}) {
+  const f = fixture(t, { ...opts, maintenance: true });
+  const authority = mkdtempSync(join(tmpdir(), "tdp-maintenance-source-"));
+  t.after(() => rmSync(authority, { recursive: true, force: true }));
+  execFileSync("git", [
+    "clone",
+    "--quiet",
+    "--no-hardlinks",
+    f.root,
+    authority,
+  ]);
+  const request = generationRequest(await f.capture());
+  const envelope = {
+    schemaVersion: 1,
+    kind: "TDP_REPOSITORY_REPAIR_MAINTENANCE",
+    repository: GENERATION_REPOSITORY,
+    claimId: request.claimId,
+    prNumber: 23,
+    generationRequest: request,
+    executorSha: request.candidateSha,
+    executorTree: request.treeSha,
+    executorPath: authority,
+    executorSourceSha256: createHash("sha256")
+      .update(readText(join(authority, "tooling/mdctl/task-generation.mjs")))
+      .digest("hex"),
+    noOtherWritersAttested: true,
+    unintegratedExecutorAcknowledged: true,
+    issuedAt: request.issuedAt,
+    expiresAt: request.expiresAt,
+    nonce: request.nonce,
+  };
+  const approve = () => {
+    const time = new Date().toISOString();
+    f.provider.comments = [
+      {
+        id: 31,
+        body: "APPROVED_EXECUTOR_MAINTENANCE:" + generationDigest(envelope),
+        user: structuredClone(f.provider.owner),
+        author_association: "OWNER",
+        performed_via_github_app: null,
+        created_at: time,
+        updated_at: time,
+        issue_url: `https://api.github.com/repos/${GENERATION_REPOSITORY}/issues/23`,
+        html_url: `https://github.com/${GENERATION_REPOSITORY}/pull/23#issuecomment-31`,
+      },
+    ];
+  };
+  approve();
+  const run = (action, api = f.api) =>
+    runMaintenanceGeneration(action, f.options, envelope, {
+      api,
+      authorityRoot: authority,
+    });
+  return { f, envelope, authority, approve, run };
+}
+
+test("maintenance uses one internal lock, real owner readbacks and exact metadata-only descendant", async (t) => {
+  const { f, envelope, run } = await maintenanceFixture(t);
+  let lockedReads = 0;
+  const api = async (path) => {
+    if (existsSync(f.lock) && path.includes("/comments")) lockedReads++;
+    return f.api(path);
+  };
+  const before = f.git("rev-parse", "HEAD");
+  const out = await run("prepare", api);
+  assert.equal(out.state, "PREPARED_REQUIRES_FINAL_PROOF");
+  assert(lockedReads > 0);
+  const intent = readJson(join(out.directory, "intent.json"));
+  assert.equal(intent.ownerDecision, null);
+  assert.equal(
+    f.git("diff", "--name-only"),
+    ".morro/changesets/MD-TASK-GENERATION-REPOSITORY-20261114.json",
+  );
+  const head = f.commit();
+  assert.equal(f.git("show", "-s", "--format=%P", "HEAD"), before);
+  const result = await run("prove", api);
+  assert.equal(result.state, "MAINTENANCE_FINAL_PROVEN");
+  assert.equal(result.candidateSha, head);
+  assert.equal(result.remoteProofAccepted, false);
+  assert(!existsSync(f.lock));
+  await assert.rejects(run("prepare"));
+  await assert.rejects(run("prove"));
+});
+
+for (const [name, mutate] of [
+  ["missing consent", (x) => (x.f.provider.comments = [])],
+  ["generic consent", (x) => (x.f.provider.comments[0].body = "authorized")],
+  [
+    "MISSING namespace",
+    (x) =>
+      (x.f.provider.comments[0].body =
+        "APPROVED_TASK_GENERATION:" + generationDigest(x.envelope)),
+  ],
+  [
+    "app consent",
+    (x) => (x.f.provider.comments[0].performed_via_github_app = { id: 1 }),
+  ],
+  [
+    "edited consent",
+    (x) => (x.f.provider.comments[0].updated_at = "2000-01-01T00:00:00Z"),
+  ],
+  ["different owner", (x) => (x.f.provider.comments[0].user.id = 20)],
+  [
+    "wrong issue",
+    (x) =>
+      (x.f.provider.comments[0].issue_url =
+        x.f.provider.comments[0].issue_url.replace("23", "21")),
+  ],
+  [
+    "unacknowledged source",
+    (x) => (x.envelope.unintegratedExecutorAcknowledged = false),
+  ],
+  [
+    "truthy acknowledgment",
+    (x) => (x.envelope.noOtherWritersAttested = "true"),
+  ],
+  [
+    "different executor tree",
+    (x) => (x.envelope.executorTree = "f".repeat(40)),
+  ],
+  [
+    "different executor digest",
+    (x) => (x.envelope.executorSourceSha256 = "f".repeat(64)),
+  ],
+  ["extra authority", (x) => (x.envelope.merge = true)],
+  ["wrong PR", (x) => (x.envelope.prNumber = 21)],
+  [
+    "expired window",
+    (x) => {
+      x.envelope.expiresAt = "2000-01-01T00:00:00Z";
+      x.envelope.generationRequest.expiresAt = x.envelope.expiresAt;
+    },
+  ],
+])
+  test("maintenance rejects " + name, async (t) => {
+    const x = await maintenanceFixture(t);
+    mutate(x);
+    await assert.rejects(x.run("prepare"));
+    assert.equal(x.f.git("status", "--porcelain"), "");
+  });
+
+test("maintenance revocation under existing lock aborts before projection and retains lock", async (t) => {
+  const x = await maintenanceFixture(t);
+  let once = false;
+  const api = async (path) => {
+    if (existsSync(x.f.lock) && !once) {
+      once = true;
+      x.f.provider.comments[0].body =
+        "REVOKED_EXECUTOR_MAINTENANCE:" + generationDigest(x.envelope);
+    }
+    return x.f.api(path);
+  };
+  await assert.rejects(x.run("prepare", api), /OWNER_REVOKED/);
+  assert(existsSync(x.f.lock));
+  assert.equal(x.f.git("status", "--porcelain"), "");
+});
+test("maintenance failure after nonce reservation is not retryable even after lock removal", async (t) => {
+  const x = await maintenanceFixture(t, {
+    proof: "throw new Error('fixture proof fails');",
+  });
+  await assert.rejects(x.run("prepare"));
+  const reservation = join(
+    x.f.root,
+    ".git/task-generation-maintenance",
+    x.envelope.nonce + ".reservation.json",
+  );
+  assert(existsSync(reservation));
+  rmSync(x.f.lock, { recursive: true });
+  await assert.rejects(
+    x.run("prepare"),
+    /MAINTENANCE_NONCE_USED|NONCE_ALREADY_USED/,
+  );
+  assert(existsSync(reservation));
+});
+for (const mode of ["product", "extra-parent", "second-commit"])
+  test("maintenance final rejects " + mode, async (t) => {
+    const x = await maintenanceFixture(t);
+    await x.run("prepare");
+    if (mode === "product")
+      x.f.write("tooling/product.mjs", "export const product=2;\n");
+    x.f.commit();
+    if (mode === "second-commit")
+      x.f.git("commit", "--allow-empty", "-qm", "extra");
+    if (mode === "extra-parent") {
+      const tree = x.f.git("rev-parse", "HEAD^{tree}");
+      const merge = x.f.git(
+        "commit-tree",
+        tree,
+        "-p",
+        x.envelope.executorSha,
+        "-p",
+        x.f.main,
+        "-m",
+        "extra parent",
+      );
+      x.f.git("reset", "--hard", merge);
+    }
+    await assert.rejects(
+      x.run("prove"),
+      /MAINTENANCE_FINAL_SCOPE|MAINTENANCE_SINGLE_COMMIT/,
+    );
+  });
+
+test("maintenance journal cannot be finalized through ordinary prove", async (t) => {
+  const x = await maintenanceFixture(t);
+  await x.run("prepare");
+  x.f.commit();
+  await assert.rejects(
+    x.f.prove(x.envelope.nonce),
+    /MAINTENANCE_ADMISSION_REQUIRED/,
+  );
+});
+test("maintenance detects consent revoked after real bounded proof before projection", async (t) => {
+  const x = await maintenanceFixture(t);
+  let changed = false;
+  const preliminary = x.f.journalPath(
+    x.envelope.nonce,
+    "preliminary-proof.json",
+  );
+  const api = async (path) => {
+    if (existsSync(preliminary) && !changed) {
+      changed = true;
+      x.f.provider.comments[0].body =
+        "REVOKED_EXECUTOR_MAINTENANCE:" + generationDigest(x.envelope);
+    }
+    return x.f.api(path);
+  };
+  await assert.rejects(x.run("prepare", api), /OWNER_REVOKED/);
+  assert(changed);
+  assert.equal(x.f.git("status", "--porcelain"), "");
+  assert(existsSync(x.f.lock));
+});
+test("maintenance detects main drift under lock", async (t) => {
+  const x = await maintenanceFixture(t);
+  let changed = false;
+  const api = async (path) => {
+    if (existsSync(x.f.lock) && !changed) {
+      changed = true;
+      x.f.provider.main = "f".repeat(40);
+    }
+    return x.f.api(path);
+  };
+  await assert.rejects(x.run("prepare", api), /MAIN_MOVED|MAINTENANCE_MAIN/);
+  assert.equal(x.f.git("status", "--porcelain"), "");
+});
+test("maintenance detects whole source tree drift even if entry file unchanged", async (t) => {
+  const x = await maintenanceFixture(t);
+  writeFileSync(
+    join(x.authority, "other-module.mjs"),
+    "export const changed=true;\n",
+  );
+  await assert.rejects(x.run("prepare"), /MAINTENANCE_SOURCE_DIRTY/);
+  assert.equal(x.f.git("status", "--porcelain"), "");
+});
+test("maintenance rejects simultaneous contenders without deleting incumbent lock", async (t) => {
+  const x = await maintenanceFixture(t);
+  const results = await Promise.allSettled([
+    x.run("prepare"),
+    x.run("prepare"),
+  ]);
+  assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+  assert.equal(results.filter((r) => r.status === "rejected").length, 1);
+  assert.match(
+    String(results.find((r) => r.status === "rejected").reason),
+    /EEXIST|NONCE/,
+  );
+  const prepared = join(
+    x.f.root,
+    ".git/task-generation-maintenance",
+    x.envelope.nonce + ".prepared.json",
+  );
+  assert(existsSync(prepared));
+});
+test("maintenance rejects duplicate personal approvals and exhausted pagination", async (t) => {
+  const x = await maintenanceFixture(t);
+  x.f.provider.comments.push({
+    ...x.f.provider.comments[0],
+    id: 32,
+    html_url: x.f.provider.comments[0].html_url.replace("31", "32"),
+  });
+  await assert.rejects(x.run("prepare"), /OWNER_DECISION_REQUIRED/);
+  const api = async (path) =>
+    path.includes("comments?per_page")
+      ? Array.from({ length: 100 }, () => ({ body: "other" }))
+      : x.f.api(path);
+  await assert.rejects(x.run("prepare", api), /COMMENT_PAGINATION_LIMIT/);
+});
+test("REVIEW terminal remote read must not allow dirty final product", async (t) => {
+  const x = await maintenanceFixture(t);
+  await x.run("prepare");
+  x.f.commit();
+  let mutated = false;
+  const api = async (path) => {
+    const result = await x.f.api(path);
+    if (
+      !mutated &&
+      existsSync(x.f.journalPath(x.envelope.nonce, "final-proof.json")) &&
+      path.includes("/git/ref/heads/")
+    ) {
+      mutated = true;
+      x.f.write("tooling/product.mjs", "export const product = 666;\n");
+    }
+    return result;
+  };
+  await assert.rejects(x.run("prove", api));
+  assert(mutated);
+});
+test("REVIEW terminal proof tamper must not receive valid receipt", async (t) => {
+  const x = await maintenanceFixture(t);
+  await x.run("prepare");
+  x.f.commit();
+  let mutated = false;
+  const fp = x.f.journalPath(x.envelope.nonce, "final-proof.json");
+  const api = async (path) => {
+    const result = await x.f.api(path);
+    if (!mutated && existsSync(fp) && path.includes("/git/ref/heads/")) {
+      mutated = true;
+      writeFileSync(
+        fp,
+        JSON.stringify({ state: "fabricated", proof: "not a proof" }),
+      );
+    }
+    return result;
+  };
+  await assert.rejects(x.run("prove", api));
+  assert(mutated);
+});
+test("REVIEW prepare must reject newly untracked outside scope", async (t) => {
+  const x = await maintenanceFixture(t);
+  let mutated = false;
+  const prepared = x.f.journalPath(x.envelope.nonce, "prepared.json");
+  const api = async (path) => {
+    const result = await x.f.api(path);
+    if (!mutated && existsSync(prepared) && path.includes("/git/ref/heads/")) {
+      mutated = true;
+      x.f.write("unexpected-new-file.txt", "out of scope");
+    }
+    return result;
+  };
+  await assert.rejects(x.run("prepare", api));
+  assert(mutated);
+});
+test("REVIEW expiration during terminal remote reads must stop receipt", async (t) => {
+  const x = await maintenanceFixture(t);
+  await x.run("prepare");
+  x.f.commit();
+  let now = Date.now(),
+    expired = false;
+  const fp = x.f.journalPath(x.envelope.nonce, "final-proof.json");
+  const api = async (path) => {
+    const result = await x.f.api(path);
+    if (existsSync(fp) && path.includes("/git/ref/heads/")) {
+      now = Date.parse(x.envelope.expiresAt) + 1;
+      expired = true;
+    }
+    return result;
+  };
+  await assert.rejects(
+    runMaintenanceGeneration("prove", x.f.options, x.envelope, {
+      api,
+      authorityRoot: x.authority,
+      clock: () => now,
+    }),
+  );
+  assert(expired);
+});
+
+for (const phase of ["prepare", "prove"]) {
+  test(`reconstructed maintenance ${phase} expiration after terminal provider await`, async (t) => {
+    const x = await maintenanceFixture(t);
+    if (phase === "prove") {
+      await x.run("prepare");
+      x.f.commit();
+    }
+    let now = Date.now(),
+      changed = false;
+    const marker = x.f.journalPath(
+      x.envelope.nonce,
+      phase === "prove" ? "final-proof.json" : "prepared.json",
+    );
+    const api = async (path) => {
+      const result = await x.f.api(path);
+      if (existsSync(marker) && path.includes("/git/ref/heads/") && !changed) {
+        changed = true;
+        now = Date.parse(x.envelope.expiresAt) + 1;
+      }
+      return result;
+    };
+    await assert.rejects(
+      runMaintenanceGeneration(phase, x.f.options, x.envelope, {
+        api,
+        authorityRoot: x.authority,
+        clock: () => now,
+      }),
+      /MAINTENANCE_EXPIRED/,
+    );
+    assert(changed);
+    assert(
+      !existsSync(
+        join(
+          x.f.root,
+          ".git/task-generation-maintenance",
+          x.envelope.nonce +
+            (phase === "prove" ? ".complete.json" : ".prepared.json"),
+        ),
+      ),
+    );
+    assert(existsSync(x.f.lock));
+  });
+}
+
+test("reconstructed maintenance rejects post-proof revocation before creating final-proof", async (t) => {
+  const proof = `import{readFileSync,writeFileSync,existsSync}from'node:fs';const p='.git/proof-count';writeFileSync(p,String((existsSync(p)?Number(readFileSync(p,'utf8')):0)+1));`;
+  const x = await maintenanceFixture(t, { proof });
+  const out = await x.run("prepare");
+  x.f.commit();
+  const count = Number(
+    readFileSync(join(x.f.root, ".git/proof-count"), "utf8"),
+  );
+  let changed = false;
+  const api = async (path) => {
+    if (
+      !changed &&
+      Number(readFileSync(join(x.f.root, ".git/proof-count"), "utf8")) > count
+    ) {
+      changed = true;
+      x.f.provider.comments[0].body =
+        "REVOKED_EXECUTOR_MAINTENANCE:" + generationDigest(x.envelope);
+    }
+    return x.f.api(path);
+  };
+  await assert.rejects(x.run("prove", api), /OWNER_REVOKED/);
+  assert(changed);
+  assert(!existsSync(join(out.directory, "final-proof.json")));
+  assert(existsSync(x.f.lock));
+});
