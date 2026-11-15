@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-CONTROL-CENTER-CATALOG-20261115",
   "objective": "restore-control-center-publication-access-and-published-business-products-offers-map-actions-with-exact-business-ownership-preserving-auth-and-tenant-boundaries",
-  "baseSha": "9c75f1d61cae1986f601d2c2cdbaf369cf9f9771",
+  "baseSha": "e60ac7c9fc059514a01535800fce6311e4e97945",
   "branch": "fix/control-center-catalog-20261115",
-  "state": "LOCAL_PROVEN",
+  "state": "IMPLEMENTING",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
