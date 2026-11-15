@@ -425,7 +425,7 @@ interface PlaceDetailConsumer {
   setFavorites(value: unknown[]): void;
   refreshSaved(): void;
   rails: Array<Array<{ label: string; value: string }>>;
-  messages: Array<{ name: string; description: string }>;
+  messages: Array<{ name: string; description: string; lineBreaks: number }>;
   events: Array<{ type: string; detail: Record<string, unknown> }>;
   snapshot(): {
     place: string | undefined;
@@ -507,8 +507,9 @@ function actualPlaceDetailConsumer(
         appendChild(node){this.children.push(node);if(node.id)elements.set(node.id,node);}
         replaceChildren(...nodes){
           this.children=nodes;
+          if(this.className==="md-assistant-place-detail-description")this.textContent=nodes.map(node=>node.textContent).join("");
           if(this.id===ASSISTANT_FLOW_MESSAGE_ID){
-            messages.push({name:nodes[0]?.textContent??"",description:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.textContent??""});
+            messages.push({name:nodes[0]?.textContent??"",description:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.textContent??"",lineBreaks:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.children.filter(n=>n.tagName==="br").length??0});
           }
         }
         remove(){elements.delete(this.id);}
@@ -525,7 +526,7 @@ function actualPlaceDetailConsumer(
         defaultView:{localStorage:{getItem:()=>JSON.stringify({favoritePlaces:storedFavorites})},fetch() { throw Error("Unexpected direct network access"); },navigator:{geolocation:{getCurrentPosition(resolve){positionRequests+=1;if(holdPosition)resolvePosition=resolve;else resolve({coords:{latitude:-13.38,longitude:-38.91}});}}}},
         querySelector:()=>null,querySelectorAll:()=>[],
         getElementById:id=>elements.get(id)??null,
-        createElement:()=>new HTMLElement(),
+        createElement:(tag)=>Object.assign(new HTMLElement(),{tagName:tag}),
         addEventListener:(type,listener)=>{const current=listeners.get(type)??new Set();current.add(listener);listeners.set(type,current);},
         removeEventListener:(type,listener)=>listeners.get(type)?.delete(listener),
         dispatchEvent:event=>{events.push(event);for(const listener of listeners.get(event.type)??[])listener(event);}};
@@ -1845,6 +1846,10 @@ describe("published catalog actions on the selected place", () => {
     expect(consumer.messages.at(-1)?.description).toContain(
       "Sunset — Published experience",
     );
+    expect(consumer.messages.at(-1)?.lineBreaks).toBe(
+      (consumer.messages.at(-1)?.description.match(/\n/g) ?? []).length,
+    );
+    expect(consumer.messages.at(-1)?.lineBreaks).toBeGreaterThan(0);
     consumer.click("place-action:offers:place-a");
     expect(consumer.messages.at(-1)?.description).toContain(
       "Sunset offer — R$",

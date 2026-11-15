@@ -1314,6 +1314,16 @@ export function installExploreLocationsControl({
       const body = document.createElement("span");
       body.className = "md-assistant-place-detail-description";
       body.textContent = description;
+      if (description.includes("\n")) {
+        const lines: Node[] = [];
+        for (const [index, text] of description.split("\n").entries()) {
+          if (index > 0) lines.push(document.createElement("br"));
+          const line = document.createElement("span");
+          line.textContent = (index > 0 ? "\n" : "") + text;
+          lines.push(line);
+        }
+        body.replaceChildren(...lines);
+      }
       content.push(body);
     }
     message.replaceChildren(...content);
