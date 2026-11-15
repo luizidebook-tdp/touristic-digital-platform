@@ -148,7 +148,10 @@
         "apps/morro-digital-platform/tooling/admin-domain-adapters.mjs",
         "apps/morro-digital-platform/tooling/catalog-platform-runtime.mjs",
         "apps/morro-digital-platform/tooling/control-center-catalog-drafts.mysql.mjs",
-        "apps/morro-digital-platform/tooling/place-platform-runtime.mjs"
+        "apps/morro-digital-platform/tooling/place-platform-runtime.mjs",
+        "packages/business/src/place-action-registry.ts",
+        "packages/business/src/place-action-registry.test.ts",
+        "packages/business/src/public-place-projection.ts"
       ]
     },
     {
