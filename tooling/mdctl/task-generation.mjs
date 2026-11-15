@@ -42,7 +42,7 @@ import {
 } from "./task-lifecycle.mjs";
 
 export const GENERATION_REPOSITORY =
-  "luizanunciostoca/touristic-digital-platform";
+  "luizidebook-tdp/touristic-digital-platform";
 const RP = ".github/morro-control/claims.json";
 const EP = ".github/morro-control/events.ndjson";
 const ENTRY = "tooling/mdctl/task-generation.mjs";
