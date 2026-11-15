@@ -291,3 +291,80 @@ test("assistant profile exact paths inherit existing conversation proof without 
     }
   }
 });
+
+for (const [path, domain, risk, db] of [
+  [
+    "apps/morro-digital-platform/src/map/public-place-catalog-presentation.ts",
+    "explore-marker-rendering",
+    "HIGH",
+    false,
+  ],
+  [
+    "apps/morro-digital-platform/tooling/catalog-platform-runtime.mjs",
+    "destination-scoped-public-place",
+    "CRITICAL",
+    true,
+  ],
+  [
+    "apps/morro-digital-platform/tooling/public-place-catalog-presentation.test.mjs",
+    "destination-scoped-public-place",
+    "CRITICAL",
+    true,
+  ],
+])
+  test(`exact catalog classification ${path}`, () => {
+    const r = analyzeFiles([path]);
+    assert.equal(r.classificationBlocked, false);
+    assert.ok(r.domains.includes(domain));
+    assert.equal(r.risk, risk);
+    assert.equal(r.needsBrowser, true);
+    assert.equal(r.needsDatabase, db);
+    if (db) assert.equal(r.needsFullSecurity, true);
+    else assert.equal(r.needsVisual, true);
+    for (const alias of [
+      path + ".backup",
+      path + "/nested",
+      path.replace(/\.(ts|mjs)$/, "-other.$1"),
+    ])
+      assert.equal(analyzeFiles([alias]).classificationBlocked, true, alias);
+  });
+
+import { execFileSync } from "node:child_process";
+test("catalog impact additions preserve all prior rules and coverage", () => {
+  const before = JSON.parse(
+    execFileSync(
+      "git",
+      [
+        "show",
+        "0173ab404809e62eadcc20849263fdb7105aec81:tooling/ci/test-impact-manifest.json",
+      ],
+      { encoding: "utf8" },
+    ),
+  );
+  const after = JSON.parse(
+    readFileSync(
+      new URL("./test-impact-manifest.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const additions = {
+    "explore-marker-rendering": [
+      "apps/morro-digital-platform/src/map/public-place-catalog-presentation.ts",
+    ],
+    "destination-scoped-public-place": [
+      "apps/morro-digital-platform/tooling/catalog-platform-runtime.mjs",
+      "apps/morro-digital-platform/tooling/public-place-catalog-presentation.test.mjs",
+    ],
+  };
+  const restored = structuredClone(after);
+  for (const [domain, paths] of Object.entries(additions)) {
+    assert.deepEqual(after.domains[domain].paths, [
+      ...before.domains[domain].paths,
+      ...paths,
+    ]);
+    restored.domains[domain].paths = restored.domains[domain].paths.filter(
+      (path) => !paths.includes(path),
+    );
+  }
+  assert.deepEqual(restored, before);
+});
