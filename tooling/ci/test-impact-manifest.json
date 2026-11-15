@@ -550,7 +550,8 @@
         "apps/morro-digital-platform/public/explore-locations.css",
         "packages/geospatial/src/infrastructure/mapbox-gl-driver.ts",
         "packages/geospatial/src/infrastructure/mapbox-gl-driver.test.ts",
-        "apps/morro-digital-platform/src/ux/place-search-explore-v2-contract.test.ts"
+        "apps/morro-digital-platform/src/ux/place-search-explore-v2-contract.test.ts",
+        "apps/morro-digital-platform/src/map/public-place-catalog-presentation.ts"
       ],
       "risk": "HIGH",
       "dependsOn": [],
@@ -865,7 +866,9 @@
         "apps/morro-digital-platform/tooling/place-platform-runtime.mjs",
         "apps/morro-digital-platform/tooling/place-platform-runtime.vitest.mjs",
         "apps/morro-digital-platform/tooling/itacare-place-destination-http.mysql.mjs",
-        "apps/morro-digital-platform/tooling/dev-server.mjs"
+        "apps/morro-digital-platform/tooling/dev-server.mjs",
+        "apps/morro-digital-platform/tooling/catalog-platform-runtime.mjs",
+        "apps/morro-digital-platform/tooling/public-place-catalog-presentation.test.mjs"
       ],
       "risk": "CRITICAL",
       "dependsOn": ["business", "auth"],

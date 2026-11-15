@@ -154,7 +154,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "fix/control-center-catalog-impact-20261115",
-      "baseSha": "93b306cf5bbad9e84ba1fe30998c1aa491872034",
+      "baseSha": "0173ab404809e62eadcc20849263fdb7105aec81",
       "paths": [
         ".morro/changesets/MD-CONTROL-CENTER-CATALOG-IMPACT-20261115.json",
         "tooling/ci/test-impact-manifest.json",
