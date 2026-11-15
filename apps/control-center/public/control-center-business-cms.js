@@ -322,6 +322,16 @@ function publicationSummary(detail, escapeHtml, canMutate) {
   const editable = publication.editableRevision;
   const published = publication.publishedRevision;
   const pending = editable != null && editable !== published;
+  const visibilityMessage =
+    state === "suspended"
+      ? "A publicação está suspensa e não está visível no mapa."
+      : state === "archived"
+        ? "A empresa está arquivada e não está visível no mapa."
+        : pending
+          ? "Há alterações salvas que ainda não estão no mapa."
+          : published != null
+            ? "A revisão salva já foi publicada no mapa."
+            : "Esta empresa ainda não foi publicada no mapa.";
   const catalog = detail.catalog ?? {};
   const inactive = [
     ...safeArray(catalog.products),
@@ -330,7 +340,7 @@ function publicationSummary(detail, escapeHtml, canMutate) {
   ].filter((entry) => entry.status !== "active").length;
   return `<section class="card section-card" aria-label="Publicar alterações no mapa" data-business-publication-summary>
     <h3>Publicação no mapa</h3>
-    <p>${pending ? "Há alterações salvas que ainda não estão no mapa." : published != null ? "A revisão salva já foi publicada no mapa." : "Esta empresa ainda não foi publicada no mapa."}</p>
+    <p>${visibilityMessage}</p>
     <p>Revisão publicada: ${escapeHtml(published ?? "nenhuma")} · Revisão editável: ${escapeHtml(editable ?? "nenhuma")}</p>
     <p>Salvar perfil, localização ou catálogo cria uma revisão editável. Solicite revisão e depois publique para atualizar o mapa.</p>
     ${inactive ? `<p role="note">${escapeHtml(inactive)} item(ns) do catálogo não estão ativos. Publicar a empresa não ativa produtos, ofertas ou cardápios em rascunho. Ative os itens desejados no catálogo antes de publicar.</p>` : ""}

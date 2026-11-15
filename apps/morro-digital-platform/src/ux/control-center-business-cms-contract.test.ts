@@ -86,6 +86,29 @@ describe("Control Center Business CMS contract", () => {
     expect(markup).toMatch(/data-business-publication="publish" disabled/);
   });
 
+  it.each(["suspended", "archived"])(
+    "does not claim map visibility for %s publication",
+    (state) => {
+      const markup = String(
+        runInNewContext(
+          source.replace(/^export /gm, "") +
+            "\n publicationSummary(detail, String, false)",
+          {
+            detail: {
+              publication: {
+                state,
+                editableRevision: 17,
+                publishedRevision: 17,
+              },
+            },
+          },
+        ),
+      );
+      expect(markup).toContain("não está visível no mapa");
+      expect(markup).not.toContain("A revisão salva já foi publicada no mapa.");
+    },
+  );
+
   it("preserves explicit review and capability requirements without publishing on save", () => {
     const render = (state: string, canMutate: boolean) =>
       String(
