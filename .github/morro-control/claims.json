@@ -169,7 +169,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "fix/control-center-catalog-runtime-20261115",
-      "baseSha": "c3bfd3d29b398fb0c05cdee728894498e827867f",
+      "baseSha": "06987b331cade35d49c1ac291b3c3b97aeb0a514",
       "paths": [
         "apps/morro-digital-platform/tooling/place-platform-runtime.mjs",
         "apps/morro-digital-platform/tooling/place-platform-runtime.vitest.mjs",

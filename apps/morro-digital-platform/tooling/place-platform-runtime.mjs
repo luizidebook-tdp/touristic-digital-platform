@@ -238,6 +238,30 @@ function governedDataFromPlace(place) {
   });
 }
 
+const catalogPlaceCapabilities = Object.freeze(["products", "offers", "menu"]);
+
+function mergeCatalogCapabilities(existing, requested) {
+  if (requested === undefined) return existing;
+  if (
+    !Array.isArray(requested) ||
+    requested.some(
+      (value) =>
+        typeof value !== "string" || !catalogPlaceCapabilities.includes(value),
+    )
+  ) {
+    throw new Error("INVALID_CATALOG_CAPABILITIES");
+  }
+  return Object.freeze({
+    ...existing,
+    enabled: Object.freeze([
+      ...existing.enabled.filter(
+        (value) => !catalogPlaceCapabilities.includes(value),
+      ),
+      ...catalogPlaceCapabilities.filter((value) => requested.includes(value)),
+    ]),
+  });
+}
+
 function mergeProfile(place, input, now) {
   const nextName = clean(input.name, 160) || place.name;
   const tags =
@@ -257,6 +281,10 @@ function mergeProfile(place, input, now) {
   return Object.freeze({
     ...place,
     name: nextName,
+    capabilities: mergeCatalogCapabilities(
+      place.capabilities,
+      input.catalogCapabilities,
+    ),
     slug: slug(nextName) || place.slug,
     categoryId: clean(input.categoryId, 160) || place.categoryId,
     shortDescription:
@@ -1813,6 +1841,9 @@ export function createPlacePlatformRuntime({
             description: place.description,
             tags: place.tags,
             amenities: place.amenities,
+            catalogCapabilities: catalogPlaceCapabilities.filter((value) =>
+              place.capabilities.enabled.includes(value),
+            ),
           }
         : {},
       location: place
