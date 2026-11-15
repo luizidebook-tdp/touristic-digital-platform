@@ -123,6 +123,21 @@
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-16T23:00:00.000Z"
+    },
+    "MD-STAGING-OCI-OWNER-MIGRATION-20261115": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "fix/staging-oci-owner-migration-20261115",
+      "baseSha": "50f4354f3217456d867af149d64a5265fe73320c",
+      "paths": [
+        ".morro/changesets/MD-STAGING-OCI-OWNER-MIGRATION-20261115.json",
+        "tooling/ci/staging-oci-deployment-evidence.mjs",
+        "tooling/ci/staging-oci-deployment-evidence.test.mjs"
+      ],
+      "domains": ["ci-release"],
+      "risk": "P0",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-16T23:00:00.000Z"
     }
   }
 }
