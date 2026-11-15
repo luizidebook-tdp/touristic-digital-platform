@@ -102,7 +102,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "fix/d02-a01-reconciled-20261113",
-      "baseSha": "8339f1f1fbe028fc9e6c9afc1ece4c99fad86cea",
+      "baseSha": "0289975287ba4680deeac5681119caf6a254db71",
       "paths": [
         "apps/morro-digital-platform/tooling/ticketing-operator-authorization.test.mjs",
         "services/ticketing/src/commerce-public-http-transport.test.ts",
