@@ -164,6 +164,21 @@
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-16T23:00:00.000Z"
+    },
+    "MD-CONTROL-CENTER-CATALOG-RUNTIME-20261115": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "fix/control-center-catalog-runtime-20261115",
+      "baseSha": "c3bfd3d29b398fb0c05cdee728894498e827867f",
+      "paths": [
+        "apps/morro-digital-platform/tooling/place-platform-runtime.mjs",
+        "apps/morro-digital-platform/tooling/place-platform-runtime.vitest.mjs",
+        ".morro/changesets/MD-CONTROL-CENTER-CATALOG-RUNTIME-20261115.json"
+      ],
+      "domains": ["business", "auth"],
+      "risk": "P0",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-16T23:00:00.000Z"
     }
   }
 }
