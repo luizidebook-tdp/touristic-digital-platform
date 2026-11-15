@@ -12,7 +12,7 @@ export function deploymentEvidence(env) {
   assert.match(env.IMAGE_RUN_ID ?? "", /^[1-9][0-9]*$/u);
   assert.equal(
     env.IMAGE_REPOSITORY,
-    "ghcr.io/luizanunciostoca/morro-digital-v2",
+    "ghcr.io/luizidebook-tdp/morro-digital-v2",
   );
   assert.equal(env.TARGET_URL, "https://morro-digital-v2-staging.onrender.com");
   const requestedDeployId = /^dep-[a-z0-9]+$/u.test(env.DEPLOY_ID ?? "")

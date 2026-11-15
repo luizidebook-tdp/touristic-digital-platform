@@ -10,7 +10,7 @@ const env = {
   LIVE_RELEASE_SHA: "a".repeat(40),
   RUNTIME_OUTCOME: "success",
   DEPLOY_ID: "dep-firstattempt",
-  IMAGE_REPOSITORY: "ghcr.io/luizanunciostoca/morro-digital-v2",
+  IMAGE_REPOSITORY: "ghcr.io/luizidebook-tdp/morro-digital-v2",
   TARGET_URL: "https://morro-digital-v2-staging.onrender.com",
 };
 
@@ -64,6 +64,19 @@ test("invalid receipt cannot inject extra evidence lines", () => {
     "unknown",
   );
 });
+
+for (const image of [
+  "ghcr.io/luizanunciostoca/morro-digital-v2",
+  "ghcr.io/untrusted-owner/morro-digital-v2",
+  "ghcr.io/luizidebook-tdp/other-image",
+  undefined,
+]) {
+  test(`Actions evidence rejects noncanonical image: ${image}`, () => {
+    assert.throws(() =>
+      deploymentEvidence({ ...env, IMAGE_REPOSITORY: image }),
+    );
+  });
+}
 
 const workflow = "11111111-2222-4333-8444-555555555555";
 const project = "418769eb-78ac-4cd3-a2d4-98fcca743a54";
