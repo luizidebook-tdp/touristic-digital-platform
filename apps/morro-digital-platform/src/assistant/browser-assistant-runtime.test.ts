@@ -591,6 +591,7 @@ function pendingAssistantFixture() {
     `
     let destroyed=false, requestGeneration=0, assistantUiGeneration=0, currentPresentation=null, legacyMenuRouting=false;
     const activeStage="detail", activePlaceLocation={name:"Praia A",category:"beaches"};
+    const activePlaceActionValues=Object.freeze(["place-action:info:place-a"]);
     const activePlaceDetail={placeId:"place-a",location:activePlaceLocation,categoryLabel:"Praias",description:"Confirmed place A details",locale:"pt"};
     ${functions}
     ${declarations}
