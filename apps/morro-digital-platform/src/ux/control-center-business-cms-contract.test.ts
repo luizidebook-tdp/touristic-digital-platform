@@ -10,6 +10,14 @@ const source = readFileSync(
   "utf8",
 );
 
+function parseFixtureRequest(body: string): Record<string, unknown> {
+  const value: unknown = JSON.parse(body);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("FIXTURE_REQUEST_OBJECT_REQUIRED");
+  }
+  return value as Record<string, unknown>;
+}
+
 describe("Control Center Business CMS contract", () => {
   it("offers only explicit catalogue buttons and restores checked values from the editable profile", () => {
     const render = (canMutate: boolean) =>
@@ -58,7 +66,7 @@ describe("Control Center Business CMS contract", () => {
       const ctx = {
         content: root,
         api: async (url: string, request: { body: string }) => {
-          requests.push({ url, body: JSON.parse(request.body) });
+          requests.push({ url, body: parseFixtureRequest(request.body) });
         },
       };
       class FormDataFixture {
@@ -158,8 +166,17 @@ describe("Control Center Business CMS contract", () => {
     const ctx = {
       content: root,
       api: async (_url: string, request: { body: string }) => {
-        const input = JSON.parse(request.body);
-        calls.push(input);
+        const input = parseFixtureRequest(request.body);
+        if (
+          typeof input.action !== "string" ||
+          typeof input.expectedRevision !== "number"
+        ) {
+          throw new Error("FIXTURE_PUBLICATION_REQUEST_INVALID");
+        }
+        calls.push({
+          action: input.action,
+          expectedRevision: input.expectedRevision,
+        });
         if (input.action === "publish")
           detail.publication.publishedRevision = input.expectedRevision;
       },
