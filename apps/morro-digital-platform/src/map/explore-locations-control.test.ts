@@ -1,3 +1,4 @@
+import { publicPlaceCatalogText } from "./public-place-catalog-presentation.js";
 import { readFileSync } from "node:fs";
 import { compileFunction } from "node:vm";
 import ts from "typescript";
@@ -424,7 +425,7 @@ interface PlaceDetailConsumer {
   setFavorites(value: unknown[]): void;
   refreshSaved(): void;
   rails: Array<Array<{ label: string; value: string }>>;
-  messages: Array<{ name: string; description: string }>;
+  messages: Array<{ name: string; description: string; lineBreaks: number }>;
   events: Array<{ type: string; detail: Record<string, unknown> }>;
   snapshot(): {
     place: string | undefined;
@@ -491,7 +492,7 @@ function actualPlaceDetailConsumer(
   // are fixtures; the ID, generation, copy and dispatch decisions are real.
   const javascript = ts.transpileModule(
     `
-      const {locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator}=dependencies;
+      const {publicPlaceCatalogText,locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator}=dependencies;
       let activePlace,activePlaceLocation,activePlaceDetail,activeCategory,activeStage="menu",interactionGeneration=0;
       let refreshSavedPlaceActions=()=>{};
       let activePlaceActionValues=[],datasetCriteria=[],mapCalls=0,detailRequests=0;
@@ -506,8 +507,9 @@ function actualPlaceDetailConsumer(
         appendChild(node){this.children.push(node);if(node.id)elements.set(node.id,node);}
         replaceChildren(...nodes){
           this.children=nodes;
+          if(this.className==="md-assistant-place-detail-description")this.textContent=nodes.map(node=>node.textContent).join("");
           if(this.id===ASSISTANT_FLOW_MESSAGE_ID){
-            messages.push({name:nodes[0]?.textContent??"",description:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.textContent??""});
+            messages.push({name:nodes[0]?.textContent??"",description:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.textContent??"",lineBreaks:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.children.filter(n=>n.tagName==="br").length??0});
           }
         }
         remove(){elements.delete(this.id);}
@@ -524,7 +526,7 @@ function actualPlaceDetailConsumer(
         defaultView:{localStorage:{getItem:()=>JSON.stringify({favoritePlaces:storedFavorites})},fetch() { throw Error("Unexpected direct network access"); },navigator:{geolocation:{getCurrentPosition(resolve){positionRequests+=1;if(holdPosition)resolvePosition=resolve;else resolve({coords:{latitude:-13.38,longitude:-38.91}});}}}},
         querySelector:()=>null,querySelectorAll:()=>[],
         getElementById:id=>elements.get(id)??null,
-        createElement:()=>new HTMLElement(),
+        createElement:(tag)=>Object.assign(new HTMLElement(),{tagName:tag}),
         addEventListener:(type,listener)=>{const current=listeners.get(type)??new Set();current.add(listener);listeners.set(type,current);},
         removeEventListener:(type,listener)=>listeners.get(type)?.delete(listener),
         dispatchEvent:event=>{events.push(event);for(const listener of listeners.get(event.type)??[])listener(event);}};
@@ -567,6 +569,7 @@ function actualPlaceDetailConsumer(
     { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
   ).outputText;
   const dependencies = {
+    publicPlaceCatalogText,
     locale,
     getDetail,
     normalizeSearchText,
@@ -1776,4 +1779,142 @@ describe("canonical saved/share action routing", () => {
     consumer.click("place-action:share:place-a");
     expect(consumer.events).toEqual([]);
   });
+});
+
+describe("published catalog actions on the selected place", () => {
+  it("renders server published products and menu without falling through to free-text assistant", async () => {
+    const detail = {
+      ...canonicalDetail("place-a", ""),
+      commerce: {
+        products: [
+          {
+            id: "product-a",
+            name: "Sunset",
+            description: "Published experience",
+          },
+        ],
+        offers: [
+          {
+            id: "offer-a",
+            productId: "product-a",
+            name: "Sunset offer",
+            description: "Published offer",
+            price: { minorUnits: 4500, currency: "BRL" },
+            salesEndsAt: null,
+          },
+        ],
+        menu: {
+          id: "menu-a",
+          name: "Evening menu",
+          description: "",
+          fallbackMediaId: null,
+          fallbackDocumentUrl: null,
+          categories: [
+            {
+              id: "cat-a",
+              name: "Drinks",
+              items: [
+                {
+                  id: "item-a",
+                  name: "Juice",
+                  description: "Fresh",
+                  price: { minorUnits: 1200, currency: "BRL" },
+                  available: true,
+                  mediaId: null,
+                  tags: [],
+                  allergens: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      actions: {
+        placeId: "place-a",
+        primaryAction: null,
+        secondaryActions: ["products", "menu", "offers"].map((id) => ({
+          id,
+          label: id,
+          value: `place-action:${id}:place-a`,
+          disabled: false,
+        })),
+      },
+    };
+    const consumer = actualPlaceDetailConsumer("pt", () => detail);
+    await consumer.select(canonicalLocation("place-a"));
+    consumer.click("place-action:products:place-a");
+    expect(consumer.messages.at(-1)?.description).toContain(
+      "Sunset — Published experience",
+    );
+    expect(consumer.messages.at(-1)?.lineBreaks).toBe(
+      (consumer.messages.at(-1)?.description.match(/\n/g) ?? []).length,
+    );
+    expect(consumer.messages.at(-1)?.lineBreaks).toBeGreaterThan(0);
+    consumer.click("place-action:offers:place-a");
+    expect(consumer.messages.at(-1)?.description).toContain(
+      "Sunset offer — R$",
+    );
+    consumer.click("place-action:menu:place-a");
+    expect(consumer.messages.at(-1)?.description).toContain("Juice — R$");
+    expect(
+      consumer.events.some(
+        (event) => event.type === "morro:assistant-option-selected",
+      ),
+    ).toBe(false);
+    const count = consumer.messages.length;
+    consumer.click("place-action:products:place-b");
+    consumer.click("place-action:offers:place-b");
+    expect(consumer.messages).toHaveLength(count);
+    expect(
+      consumer.events.some(
+        (event) => event.type === "morro:commerce-cta-activated",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not execute unadvertised catalog actions or reuse a previous place catalog", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    await consumer.select(canonicalLocation("place-a"));
+    const count = consumer.messages.length;
+    consumer.click("place-action:products:place-a");
+    consumer.click("place-action:menu:place-a");
+    expect(consumer.messages).toHaveLength(count);
+    await consumer.select(canonicalLocation("place-b"));
+    const after = consumer.messages.length;
+    consumer.click("place-action:products:place-a");
+    expect(consumer.messages).toHaveLength(after);
+  });
+});
+
+it("preserves the current catalog section during locale refresh", async () => {
+  const consumer = actualPlaceDetailConsumer("pt", (id, { locale }) => ({
+    ...canonicalDetail(id, ""),
+    commerce: {
+      products: [
+        { id: "product-a", name: `Product ${locale}`, description: "" },
+      ],
+      offers: [],
+      menu: null,
+    },
+    actions: {
+      placeId: id,
+      primaryAction: null,
+      secondaryActions: [
+        {
+          id: "products",
+          label: "Products",
+          value: `place-action:products:${id}`,
+          disabled: false,
+        },
+      ],
+    },
+  }));
+  await consumer.select(canonicalLocation("place-a"));
+  consumer.click("place-action:products:place-a");
+  expect(consumer.messages.at(-1)?.description).toContain("Product pt");
+  consumer.changeLocale("en");
+  await settleDetailRefresh();
+  expect(consumer.messages.at(-1)?.description).toContain("Product en");
 });

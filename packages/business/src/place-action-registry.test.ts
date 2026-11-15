@@ -440,3 +440,63 @@ describe("Place Action Registry", () => {
     },
   );
 });
+
+it("shows published active products for a nightlife business only when capability and scope match", () => {
+  const context = {
+    place: place(["products"]),
+    category: category("nightlife"),
+    locale: "pt" as const,
+    now: NOW,
+    products: [product],
+  };
+  expect(
+    resolvePlacePresentationActions(context).secondaryActions,
+  ).toContainEqual(
+    expect.objectContaining({
+      id: "products",
+      value: "place-action:products:place-a",
+    }),
+  );
+  for (const products of [
+    [],
+    [{ ...product, status: "draft" as const }],
+    [{ ...product, businessId: asBusinessId("other-business") }],
+    [{ ...product, placeId: asPlaceId("other-place") }],
+    [
+      {
+        ...product,
+        destinationId: "other-destination" as Place["destinationId"],
+      },
+    ],
+  ]) {
+    expect(
+      resolvePlacePresentationActions({
+        ...context,
+        products,
+      }).secondaryActions.some((action) => action.id === "products"),
+    ).toBe(false);
+  }
+  expect(
+    resolvePlacePresentationActions({
+      ...context,
+      place: place([]),
+    }).secondaryActions.some((action) => action.id === "products"),
+  ).toBe(false);
+});
+
+it("views published offers without initiating a purchase while preserving the ticket CTA", () => {
+  const result = resolvePlacePresentationActions({
+    place: place(["offers"]),
+    category: category("nightlife"),
+    locale: "pt",
+    now: NOW,
+    products: [product],
+    offers: [offer()],
+  });
+  expect(result.secondaryActions).toContainEqual(
+    expect.objectContaining({
+      id: "offers",
+      value: "place-action:offers:place-a",
+    }),
+  );
+});

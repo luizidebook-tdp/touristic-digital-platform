@@ -64,7 +64,15 @@ export interface PublicMenu {
   readonly categories: readonly PublicMenuCategory[];
 }
 
+export interface PublicProductSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+}
+
 export interface PublicPlaceCommerceProjection {
+  /** Active products from the exact published catalog revision, never drafts. */
+  readonly products?: readonly PublicProductSummary[];
   readonly offers: readonly PublicOfferSummary[];
   readonly menu: PublicMenu | null;
 }

@@ -209,7 +209,9 @@
         "services/business/",
         "apps/morro-digital-platform/tooling/place-platform-runtime.mjs",
         "apps/morro-digital-platform/tooling/place-platform-runtime.vitest.mjs",
-        "apps/morro-digital-platform/tooling/itacare-place-destination-http.mysql.mjs"
+        "apps/morro-digital-platform/tooling/itacare-place-destination-http.mysql.mjs",
+        "apps/morro-digital-platform/tooling/catalog-platform-runtime.mjs",
+        "apps/morro-digital-platform/tooling/public-place-catalog-presentation.test.mjs"
       ],
       "contracts": []
     },

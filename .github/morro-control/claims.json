@@ -128,7 +128,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "fix/control-center-catalog-20261115",
-      "baseSha": "51a00fa73796688ca84163960b7c2eae8da2de20",
+      "baseSha": "e60ac7c9fc059514a01535800fce6311e4e97945",
       "paths": [
         "apps/control-center/public/control-center-business-cms.js",
         "apps/morro-digital-platform/public/tourist-shell-v2.css",

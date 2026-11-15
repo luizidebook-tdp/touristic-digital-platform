@@ -889,3 +889,57 @@ test("CRM storage ownership is limited to two exact auth paths without widening 
       assert.deepEqual(owners(path, canonical), owners(path, before), path);
   }
 });
+
+test("catalog runtime ownership is exact without broadening business or weakening auth", () => {
+  const registry = JSON.parse(readFileSync(".morro/ownership.json", "utf8"));
+  const paths = [
+    "apps/morro-digital-platform/tooling/catalog-platform-runtime.mjs",
+    "apps/morro-digital-platform/tooling/public-place-catalog-presentation.test.mjs",
+  ];
+  const owners = (file, value) =>
+    value.domains
+      .filter((domain) =>
+        domain.pathPrefixes.some((prefix) =>
+          prefix.endsWith("/") ? file.startsWith(prefix) : file === prefix,
+        ),
+      )
+      .map((domain) => domain.id);
+  for (const file of paths) {
+    assert.deepEqual(owners(file, registry), ["business"]);
+    assert.deepEqual(assertOwnershipCoverage([file], registry), { covered: 1 });
+    for (const alias of [
+      file + ".backup",
+      file + "/nested",
+      file.replace(".mjs", "-other.mjs"),
+    ])
+      assert.deepEqual(owners(alias, registry), []);
+  }
+  const before = structuredClone(registry);
+  before.domains.find((domain) => domain.id === "business").pathPrefixes =
+    before.domains
+      .find((domain) => domain.id === "business")
+      .pathPrefixes.filter((path) => !paths.includes(path));
+  for (const file of execFileSync("git", ["ls-files", "-z"], {
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter(Boolean))
+    if (!paths.includes(file))
+      assert.deepEqual(owners(file, registry), owners(file, before), file);
+  assert.deepEqual(
+    owners(
+      "apps/control-center/public/control-center-business-cms.js",
+      registry,
+    ),
+    ["auth"],
+  );
+  assert.deepEqual(
+    registry.domains.find((domain) => domain.id === "auth").contracts,
+    ["platform-authz"],
+  );
+  assert.equal(
+    JSON.parse(readFileSync(".morro/risk-policy.json", "utf8"))
+      .semanticRiskFloor["platform-authz"],
+    "critical",
+  );
+});

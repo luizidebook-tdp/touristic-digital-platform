@@ -731,6 +731,24 @@ export function createCatalogRuntime(pool) {
 
   async function getPublicCommerce(place, publishedRevision = null) {
     const context = await listActionContext(place, publishedRevision);
+    const products = Object.freeze(
+      context.products
+        .filter(
+          (product) =>
+            String(product.businessId) === String(place.businessId) &&
+            String(product.placeId) === String(place.id) &&
+            (product.destinationId === null ||
+              String(product.destinationId) === String(place.destinationId)) &&
+            product.status === "active",
+        )
+        .map((product) =>
+          Object.freeze({
+            id: String(product.id),
+            name: product.name,
+            description: product.description,
+          }),
+        ),
+    );
     const now = new Date().toISOString();
     const productById = new Map(
       context.products.map((product) => [String(product.id), product]),
@@ -755,6 +773,7 @@ export function createCatalogRuntime(pool) {
     const menu = context.menus[0] ?? null;
     if (!menu) {
       return Object.freeze({
+        products,
         offers: Object.freeze(offers),
         menu: null,
       });
@@ -791,6 +810,7 @@ export function createCatalogRuntime(pool) {
       );
 
     return Object.freeze({
+      products,
       offers: Object.freeze(offers),
       menu: Object.freeze({
         id: String(menu.id),

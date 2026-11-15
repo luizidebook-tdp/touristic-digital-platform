@@ -10,7 +10,275 @@ const source = readFileSync(
   "utf8",
 );
 
+function parseFixtureRequest(body: string): Record<string, unknown> {
+  const value: unknown = JSON.parse(body);
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("FIXTURE_REQUEST_OBJECT_REQUIRED");
+  }
+  return value as Record<string, unknown>;
+}
+
 describe("Control Center Business CMS contract", () => {
+  it("offers only explicit catalogue buttons and restores checked values from the editable profile", () => {
+    const render = (canMutate: boolean) =>
+      String(
+        runInNewContext(
+          source.replace(/^export /gm, "") +
+            '\n detailTabs({businessId:"toca",profile:{catalogCapabilities:["products","menu"]}}, String, canMutate)',
+          { canMutate },
+        ),
+      );
+    const markup = render(true);
+    expect(markup.match(/name="catalogCapabilities"/g)).toHaveLength(3);
+    expect(markup).toMatch(
+      /name="catalogCapabilities" value="products" checked/,
+    );
+    expect(markup).toMatch(/name="catalogCapabilities" value="menu" checked/);
+    expect(markup).not.toMatch(
+      /name="catalogCapabilities" value="offers" checked/,
+    );
+    expect(markup).not.toMatch(/name="catalogCapabilities" value="tickets"/);
+    expect(render(false)).toMatch(
+      /name="catalogCapabilities" value="products" checked disabled/,
+    );
+  });
+
+  it("submits the complete explicit checkbox subset including an empty opt-out", async () => {
+    for (const selected of [["products", "offers"], []]) {
+      const handler: { listener: null | ((event: unknown) => Promise<void>) } =
+        { listener: null };
+      const form = {
+        addEventListener(_name: string, fn: (event: unknown) => Promise<void>) {
+          handler.listener = fn;
+        },
+      };
+      const result = { textContent: "" };
+      const requests: Array<{ url: string; body: Record<string, unknown> }> =
+        [];
+      const root = {
+        querySelectorAll: () => [],
+        querySelector: (selector: string) =>
+          selector === "#business-cms-profile-form"
+            ? form
+            : selector === "#business-cms-profile-result"
+              ? result
+              : null,
+      };
+      const ctx = {
+        content: root,
+        api: async (url: string, request: { body: string }) => {
+          requests.push({ url, body: parseFixtureRequest(request.body) });
+        },
+      };
+      class FormDataFixture {
+        *[Symbol.iterator]() {
+          yield ["name", "Toca"];
+          for (const value of selected) yield ["catalogCapabilities", value];
+        }
+        getAll(name: string) {
+          return name === "catalogCapabilities" ? selected : [];
+        }
+      }
+      runInNewContext(
+        source.replace(/^export /gm, "") +
+          '\n renderBusinessCms=async()=>{};bindDetail(root,ctx,{businessId:"toca"});',
+        { root, ctx, FormData: FormDataFixture },
+      );
+      if (!handler.listener)
+        throw new Error("FIXTURE_SUBMIT_LISTENER_REQUIRED");
+      await handler.listener({ currentTarget: form, preventDefault() {} });
+      expect(requests).toEqual([
+        {
+          url: "/businesses/toca/cms/profile",
+          body: { name: "Toca", catalogCapabilities: selected },
+        },
+      ]);
+    }
+  });
+
+  it("does not offer ignored active or available values when creating catalogue items", () => {
+    const markup = String(
+      runInNewContext(
+        source.replace(/^export /gm, "") +
+          '\n detailTabs({businessId:"toca"}, String, true)',
+      ),
+    );
+    expect(markup.match(/name="status" disabled/g)).toHaveLength(3);
+    expect(markup).toContain('name="available" value="true" disabled');
+    expect(markup).toContain(
+      "Novos produtos, ofertas e cardápios são criados como rascunho",
+    );
+    expect(markup).toContain("ative também o produto associado");
+  });
+
+  it("enables explicit activation only in edit mode and restores creation mode on reset", () => {
+    const heading = {
+      textContent: "Novo produto",
+      dataset: {} as Record<string, string>,
+    };
+    const form = {
+      elements: { status: { disabled: true }, available: { disabled: true } },
+      querySelector: () => heading,
+    };
+    const sandbox = { form };
+    runInNewContext(
+      source.replace(/^export /gm, "") + "\n setCatalogEditingMode(form, true)",
+      sandbox,
+    );
+    expect(form.elements.status.disabled).toBe(false);
+    expect(form.elements.available.disabled).toBe(false);
+    expect(heading.textContent).toBe("Editar item existente");
+    runInNewContext(
+      source.replace(/^export /gm, "") +
+        "\n setCatalogEditingMode(form, false)",
+      { form },
+    );
+    expect(form.elements.status.disabled).toBe(true);
+    expect(form.elements.available.disabled).toBe(true);
+    expect(heading.textContent).toBe("Novo produto");
+    expect(source).toContain("setCatalogEditingMode(form, false)");
+    expect(source).toContain("setCatalogEditingMode(form, true)");
+  });
+
+  it("requires separate review and publish requests and sends the editable revision", async () => {
+    const calls: Array<{ action: string; expectedRevision: number }> = [];
+    const result = { textContent: "" };
+    const buttons = ["review", "publish"].map((action) => ({
+      dataset: { businessPublication: action },
+      listener: null as null | (() => Promise<void>),
+      addEventListener(_name: string, listener: () => Promise<void>) {
+        this.listener = listener;
+      },
+    }));
+    const root = {
+      querySelectorAll(selector: string) {
+        return selector === "[data-business-publication]" ? buttons : [];
+      },
+      querySelector(selector: string) {
+        return selector === "#business-cms-publication-result" ? result : null;
+      },
+    };
+    const detail = {
+      businessId: "toca",
+      publication: {
+        state: "draft",
+        editableRevision: 17,
+        publishedRevision: 16,
+      },
+    };
+    const ctx = {
+      content: root,
+      api: async (_url: string, request: { body: string }) => {
+        const input = parseFixtureRequest(request.body);
+        if (
+          typeof input.action !== "string" ||
+          typeof input.expectedRevision !== "number"
+        ) {
+          throw new Error("FIXTURE_PUBLICATION_REQUEST_INVALID");
+        }
+        calls.push({
+          action: input.action,
+          expectedRevision: input.expectedRevision,
+        });
+        if (input.action === "publish")
+          detail.publication.publishedRevision = input.expectedRevision;
+      },
+    };
+    runInNewContext(
+      source.replace(/^export /gm, "") +
+        "\n renderBusinessCms = async () => {}; bindDetail(root, ctx, detail);",
+      { root, ctx, detail },
+    );
+    expect(calls).toHaveLength(0);
+    await buttons[0]?.listener?.();
+    expect(calls).toEqual([{ action: "review", expectedRevision: 17 }]);
+    expect(detail.publication.publishedRevision).toBe(16);
+    expect(result.textContent).toContain("Agora clique em Publicar revisão");
+    await buttons[1]?.listener?.();
+    expect(calls).toEqual([
+      { action: "review", expectedRevision: 17 },
+      { action: "publish", expectedRevision: 17 },
+    ]);
+    expect(detail.publication.publishedRevision).toBe(17);
+    expect(result.textContent).toBe("Revisão publicada no mapa.");
+  });
+
+  it("keeps publication actions visible before the overflowing mobile tabs", () => {
+    const markup = String(
+      runInNewContext(
+        source.replace(/^export /gm, "") +
+          '\n detailTabs({businessId:"toca",publication:{state:"draft",editableRevision:17,publishedRevision:16},catalog:{products:[{status:"draft"}]}}, String, true)',
+      ),
+    );
+    expect(markup.indexOf("data-business-publication-summary")).toBeLessThan(
+      markup.indexOf('role="tablist"'),
+    );
+    expect(markup.match(/data-business-publication="review"/g)).toHaveLength(1);
+    expect(markup.match(/data-business-publication="publish"/g)).toHaveLength(
+      1,
+    );
+    expect(markup).toContain(
+      "Há alterações salvas que ainda não estão no mapa.",
+    );
+    expect(markup).toContain("Publicar a empresa não ativa produtos");
+    expect(markup).toMatch(/data-business-publication="publish" disabled/);
+  });
+
+  it.each(["suspended", "archived"])(
+    "does not claim map visibility for %s publication",
+    (state) => {
+      const markup = String(
+        runInNewContext(
+          source.replace(/^export /gm, "") +
+            "\n publicationSummary(detail, String, false)",
+          {
+            detail: {
+              publication: {
+                state,
+                editableRevision: 17,
+                publishedRevision: 17,
+              },
+            },
+          },
+        ),
+      );
+      expect(markup).toContain("não está visível no mapa");
+      expect(markup).not.toContain("A revisão salva já foi publicada no mapa.");
+    },
+  );
+
+  it("preserves explicit review and capability requirements without publishing on save", () => {
+    const render = (state: string, canMutate: boolean) =>
+      String(
+        runInNewContext(
+          source.replace(/^export /gm, "") +
+            "\n publicationSummary(detail, String, canMutate)",
+          {
+            detail: {
+              publication: {
+                state,
+                editableRevision: 17,
+                publishedRevision: 16,
+              },
+            },
+            canMutate,
+          },
+        ),
+      );
+    expect(render("review", true)).toMatch(
+      /data-business-publication="review" disabled/,
+    );
+    expect(render("review", true)).toMatch(
+      /data-business-publication="publish" >Publicar/,
+    );
+    expect(render("draft", false)).not.toContain(
+      'data-business-publication="publish"',
+    );
+    expect(source).toContain(
+      "expectedRevision: detail.publication.editableRevision",
+    );
+  });
+
   it("pairs every tab with its named panel and starts with one Tab stop", () => {
     const markup: unknown = runInNewContext(
       source.replace(/^export /gm, "") +
