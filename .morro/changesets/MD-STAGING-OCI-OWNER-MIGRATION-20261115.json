@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-STAGING-OCI-OWNER-MIGRATION-20261115",
   "objective": "bind-actions-staging-deployment-evidence-to-luizidebook-tdp-immutable-image-without-changing-circleci-production-or-release-guards",
-  "baseSha": "50f4354f3217456d867af149d64a5265fe73320c",
+  "baseSha": "bfad8d6938db14b3f6e6dcc3a1352bdb802b9f32",
   "branch": "fix/staging-oci-owner-migration-20261115",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
