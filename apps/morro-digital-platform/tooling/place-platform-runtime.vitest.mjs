@@ -101,7 +101,243 @@ const draft = {
   destinationId: "morro-de-sao-paulo",
 };
 
+function capabilityFixture() {
+  const place = {
+    id: "place-business-a",
+    businessId: "business-a",
+    destinationId: "morro-de-sao-paulo",
+    categoryId: "nightlife",
+    name: "Empresa A",
+    slug: "empresa-a",
+    description: "Publicado",
+    shortDescription: "Publicado",
+    tags: [],
+    amenities: [],
+    subcategoryIds: [],
+    location: { latitude: -13.38, longitude: -38.91 },
+    contact: {},
+    capabilities: { enabled: ["directions", "photos", "tickets", "offers"] },
+    visibility: "public",
+  };
+  const data = {
+    placeId: place.id,
+    businessId: place.businessId,
+    destinationId: place.destinationId,
+    name: place.name,
+    categoryId: place.categoryId,
+    location: place.location,
+    capabilities: place.capabilities,
+    visibility: "public",
+  };
+  const row = {
+    place_id: place.id,
+    business_id: place.businessId,
+    destination_id: place.destinationId,
+    publication_state: "published",
+    editable_place_json: JSON.stringify(place),
+    editable_revision: 16,
+    editable_revision_id: `${place.id}:r16`,
+    editable_revision_json: JSON.stringify(data),
+    published_place_json: JSON.stringify(place),
+    published_revision: 16,
+    published_revision_id: `${place.id}:r16`,
+    published_revision_json: JSON.stringify(data),
+    updated_at: new Date(),
+    updated_by: "platform-admin",
+  };
+  const h = fixture({
+    row,
+    publishedRow: row,
+    cmsRows: [row],
+    read: async (sql, params) => {
+      if (
+        sql.includes("UPDATE business_places") &&
+        sql.includes("editable_place_json = ?")
+      ) {
+        row.publication_state = params[1];
+        row.editable_revision = params[2];
+        row.editable_revision_id = params[3];
+        row.editable_place_json = params[4];
+        row.editable_revision_json = params[5];
+        return [{ affectedRows: 1 }];
+      }
+      if (
+        sql.includes("FROM business_places") &&
+        sql.includes("WHERE place_id = ? AND business_id = ?")
+      )
+        return [[row]];
+      if (sql.includes("SET publication_state = 'published'")) {
+        row.publication_state = "published";
+        row.published_revision = row.editable_revision;
+        row.published_revision_id = row.editable_revision_id;
+        row.published_place_json = row.editable_place_json;
+        row.published_revision_json = row.editable_revision_json;
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.includes("FROM catalog_")) return [[]];
+    },
+  });
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    ...h,
+    row,
+    actor: {
+      subject: "platform-owner",
+      role: "PLATFORM_OWNER",
+      businessIds: [],
+      issuedAt: now - 60,
+      expiresAt: now + 3600,
+      sessionId: "fixture",
+    },
+  };
+}
+
 describe("Business CMS persisted runtime invariants", () => {
+  it("edits only explicit catalog capabilities and exposes draft values without changing the published snapshot", async () => {
+    const h = capabilityFixture();
+    await h.runtime.start();
+    const updated = await h.runtime.updateProfile(h.actor, "business-a", {
+      catalogCapabilities: ["menu", "products", "products"],
+    });
+    expect(updated.publicationState).toBe("draft");
+    expect(updated.editableRevision.revision).toBe(17);
+    expect(updated.editableRevision.data.capabilities.enabled).toEqual([
+      "directions",
+      "photos",
+      "tickets",
+      "products",
+      "menu",
+    ]);
+    const cms = await h.runtime.getCmsDetail("business-a");
+    expect(cms.profile.catalogCapabilities).toEqual(["products", "menu"]);
+    expect(cms.publication.publishedRevision).toBe(16);
+    expect(cms.publication.editableRevision).toBe(17);
+    const response = {
+      statusCode: 0,
+      setHeader() {},
+      end(body) {
+        this.body = body;
+      },
+    };
+    await h.runtime.handlePublic(
+      { method: "GET", headers: {} },
+      response,
+      new URL("http://localhost/api/places/v1/place-business-a"),
+    );
+    expect(response.statusCode).toBe(200);
+    const published = JSON.parse(response.body);
+    expect(published.profile.capabilities).toEqual([
+      "directions",
+      "photos",
+      "tickets",
+      "offers",
+    ]);
+    expect(published.revision.number).toBe(16);
+    await h.runtime.transitionPublication(h.actor, "business-a", "review", 17);
+    expect(h.row.published_revision).toBe(16);
+    await h.runtime.transitionPublication(h.actor, "business-a", "publish", 17);
+    await h.runtime.handlePublic(
+      { method: "GET", headers: {} },
+      response,
+      new URL("http://localhost/api/places/v1/place-business-a"),
+    );
+    const promoted = JSON.parse(response.body);
+    expect(promoted.revision.number).toBe(17);
+    expect(promoted.profile.capabilities).toEqual([
+      "directions",
+      "photos",
+      "tickets",
+      "products",
+      "menu",
+    ]);
+    await h.runtime.stop();
+  });
+
+  it("preserves omitted capabilities and removes only catalogue capabilities for an explicit empty array", async () => {
+    const h = capabilityFixture();
+    await h.runtime.start();
+    const unchanged = await h.runtime.updateProfile(h.actor, "business-a", {
+      name: "Outro nome",
+    });
+    expect(unchanged.editableRevision.data.capabilities.enabled).toEqual([
+      "directions",
+      "photos",
+      "tickets",
+      "offers",
+    ]);
+    const cleared = await h.runtime.updateProfile(h.actor, "business-a", {
+      catalogCapabilities: [],
+    });
+    expect(cleared.editableRevision.data.capabilities.enabled).toEqual([
+      "directions",
+      "photos",
+      "tickets",
+    ]);
+    expect(h.row.published_revision).toBe(16);
+    await h.runtime.stop();
+  });
+
+  it.each([
+    null,
+    "products",
+    {},
+    [true],
+    ["tickets"],
+    ["booking"],
+    ["unknown"],
+    ["Products"],
+    [" products"],
+  ])(
+    "rejects malformed or out-of-scope catalogue capabilities without writing: %j",
+    async (value) => {
+      const h = capabilityFixture();
+      await h.runtime.start();
+      await expect(
+        h.runtime.updateProfile(h.actor, "business-a", {
+          catalogCapabilities: value,
+        }),
+      ).rejects.toThrow("INVALID_CATALOG_CAPABILITIES");
+      expect(h.executed.some(({ sql }) => /UPDATE|INSERT/.test(sql))).toBe(
+        false,
+      );
+      expect(h.row.editable_revision).toBe(16);
+      await h.runtime.stop();
+    },
+  );
+
+  it("does not let an unauthorized actor mutate capabilities", async () => {
+    const h = capabilityFixture();
+    await h.runtime.start();
+    await expect(
+      h.runtime.updateProfile(null, "business-a", {
+        catalogCapabilities: ["products"],
+      }),
+    ).rejects.toThrow();
+    expect(h.executed.some(({ sql }) => /UPDATE|INSERT/.test(sql))).toBe(false);
+    expect(h.row.editable_revision).toBe(16);
+    await h.runtime.stop();
+  });
+
+  it("rejects a foreign business owner and keeps suspended publication state during an authorized edit", async () => {
+    const h = capabilityFixture();
+    await h.runtime.start();
+    await expect(
+      h.runtime.updateProfile(
+        { ...h.actor, role: "BUSINESS_OWNER", businessIds: ["business-b"] },
+        "business-a",
+        { catalogCapabilities: ["offers"] },
+      ),
+    ).rejects.toThrow();
+    expect(h.executed.some(({ sql }) => /UPDATE|INSERT/.test(sql))).toBe(false);
+    h.row.publication_state = "suspended";
+    const changed = await h.runtime.updateProfile(h.actor, "business-a", {
+      catalogCapabilities: ["products"],
+    });
+    expect(changed.publicationState).toBe("suspended");
+    expect(h.row.published_revision).toBe(16);
+    await h.runtime.stop();
+  });
+
   it("rejects a duplicate Business atomically without renaming the existing owner", async () => {
     const { runtime, executed, transaction, connection } = fixture({
       duplicate: true,
