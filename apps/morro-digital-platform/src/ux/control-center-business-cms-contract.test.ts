@@ -45,10 +45,11 @@ describe("Control Center Business CMS contract", () => {
 
   it("submits the complete explicit checkbox subset including an empty opt-out", async () => {
     for (const selected of [["products", "offers"], []]) {
-      let listener: null | ((event: unknown) => Promise<void>) = null;
+      const handler: { listener: null | ((event: unknown) => Promise<void>) } =
+        { listener: null };
       const form = {
-        addEventListener(_name: string, fn: typeof listener) {
-          listener = fn;
+        addEventListener(_name: string, fn: (event: unknown) => Promise<void>) {
+          handler.listener = fn;
         },
       };
       const result = { textContent: "" };
@@ -83,7 +84,9 @@ describe("Control Center Business CMS contract", () => {
           '\n renderBusinessCms=async()=>{};bindDetail(root,ctx,{businessId:"toca"});',
         { root, ctx, FormData: FormDataFixture },
       );
-      await listener?.({ currentTarget: form, preventDefault() {} });
+      if (!handler.listener)
+        throw new Error("FIXTURE_SUBMIT_LISTENER_REQUIRED");
+      await handler.listener({ currentTarget: form, preventDefault() {} });
       expect(requests).toEqual([
         {
           url: "/businesses/toca/cms/profile",
