@@ -316,6 +316,36 @@ function listMarkup(model, escapeHtml, canMutate) {
     ${canMutate ? wizardMarkup(model, escapeHtml) : ""}`;
 }
 
+function publicationSummary(detail, escapeHtml, canMutate) {
+  const publication = detail.publication ?? {};
+  const state = publication.state ?? detail.publicationState ?? "draft";
+  const editable = publication.editableRevision;
+  const published = publication.publishedRevision;
+  const pending = editable != null && editable !== published;
+  const catalog = detail.catalog ?? {};
+  const inactive = [
+    ...safeArray(catalog.products),
+    ...safeArray(catalog.offers),
+    ...safeArray(catalog.menus),
+  ].filter((entry) => entry.status !== "active").length;
+  return `<section class="card section-card" aria-label="Publicar alterações no mapa" data-business-publication-summary>
+    <h3>Publicação no mapa</h3>
+    <p>${pending ? "Há alterações salvas que ainda não estão no mapa." : published != null ? "A revisão salva já foi publicada no mapa." : "Esta empresa ainda não foi publicada no mapa."}</p>
+    <p>Revisão publicada: ${escapeHtml(published ?? "nenhuma")} · Revisão editável: ${escapeHtml(editable ?? "nenhuma")}</p>
+    <p>Salvar perfil, localização ou catálogo cria uma revisão editável. Solicite revisão e depois publique para atualizar o mapa.</p>
+    ${inactive ? `<p role="note">${escapeHtml(inactive)} item(ns) do catálogo não estão ativos. Publicar a empresa não ativa produtos, ofertas ou cardápios em rascunho. Ative os itens desejados no catálogo antes de publicar.</p>` : ""}
+    ${
+      canMutate && editable
+        ? `<div class="business-cms-inline-actions">
+      <button class="secondary-button" type="button" data-business-publication="review" ${state === "review" || !pending ? "disabled" : ""}>Solicitar revisão</button>
+      <button class="primary-button" type="button" data-business-publication="publish" ${state === "review" ? "" : "disabled"}>Publicar revisão</button>
+    </div>`
+        : ""
+    }
+    <p id="business-cms-publication-result" role="status"></p>
+  </section>`;
+}
+
 function detailTabs(detail, escapeHtml, canMutate) {
   const profile = detail.profile ?? {};
   const location = detail.location ?? {};
@@ -636,15 +666,7 @@ function detailTabs(detail, escapeHtml, canMutate) {
           <div class="module-row"><span>Published revision</span><strong>${escapeHtml(publication.publishedRevision ?? "—")}</strong></div>
           <div class="module-row"><span>Editable revision</span><strong>${escapeHtml(publication.editableRevision ?? "—")}</strong></div>
         </div>
-        ${
-          canMutate && publication.editableRevision
-            ? `<div class="business-cms-inline-actions">
-                <button class="secondary-button" type="button" data-business-publication="review" ${publication.state === "review" ? "disabled" : ""}>Solicitar revisão</button>
-                <button class="primary-button" type="button" data-business-publication="publish" ${publication.state === "review" ? "" : "disabled"}>Publicar revisão</button>
-              </div>`
-            : ""
-        }
-        <p id="business-cms-publication-result" role="status"></p>
+
       </section>`,
     ],
   ];
@@ -672,6 +694,7 @@ function detailTabs(detail, escapeHtml, canMutate) {
       </div>
       <span class="badge">${escapeHtml(statusLabel(publication.state ?? detail.publicationState))}</span>
     </div>
+    ${publicationSummary(detail, escapeHtml, canMutate)}
     <div class="business-cms-tabs" role="tablist" aria-label="Administração da empresa">
       ${buttons}
     </div>
@@ -809,7 +832,7 @@ function bindDetail(root, ctx, detail) {
       if (ctx.isCurrent?.() === false) return;
       ctx.content.querySelector('[data-business-cms-tab="location"]')?.click();
       ctx.content.querySelector("#business-cms-location-result").textContent =
-        "Localização salva como revisão editável.";
+        "Localização salva. Solicite revisão e publique no painel acima para atualizar o mapa.";
     } catch (error) {
       if (ctx.isCurrent?.() === false) return;
       locationResult.textContent =
@@ -837,7 +860,7 @@ function bindDetail(root, ctx, detail) {
         if (ctx.isCurrent?.() === false) return;
         ctx.content.querySelector('[data-business-cms-tab="profile"]')?.click();
         ctx.content.querySelector("#business-cms-profile-result").textContent =
-          "Perfil salvo como revisão editável.";
+          "Perfil salvo. Solicite revisão e publique no painel acima para atualizar o mapa.";
       } catch (error) {
         if (ctx.isCurrent?.() === false) return;
         result.textContent =
@@ -1117,9 +1140,13 @@ function bindDetail(root, ctx, detail) {
         if (ctx.isCurrent?.() === false) return;
         await renderBusinessCms(ctx, detail.businessId);
         if (ctx.isCurrent?.() === false) return;
-        ctx.content
-          .querySelector('[data-business-cms-tab="publication"]')
-          ?.click();
+        const publishedResult = ctx.content.querySelector(
+          "#business-cms-publication-result",
+        );
+        publishedResult.textContent =
+          button.dataset.businessPublication === "publish"
+            ? "Revisão publicada no mapa."
+            : "Revisão solicitada. Agora clique em Publicar revisão para atualizar o mapa.";
       } catch (error) {
         if (ctx.isCurrent?.() === false) return;
         result.textContent =

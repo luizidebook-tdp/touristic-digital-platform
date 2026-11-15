@@ -11,6 +11,113 @@ const source = readFileSync(
 );
 
 describe("Control Center Business CMS contract", () => {
+  it("requires separate review and publish requests and sends the editable revision", async () => {
+    const calls: Array<{ action: string; expectedRevision: number }> = [];
+    const result = { textContent: "" };
+    const buttons = ["review", "publish"].map((action) => ({
+      dataset: { businessPublication: action },
+      listener: null as null | (() => Promise<void>),
+      addEventListener(_name: string, listener: () => Promise<void>) {
+        this.listener = listener;
+      },
+    }));
+    const root = {
+      querySelectorAll(selector: string) {
+        return selector === "[data-business-publication]" ? buttons : [];
+      },
+      querySelector(selector: string) {
+        return selector === "#business-cms-publication-result" ? result : null;
+      },
+    };
+    const detail = {
+      businessId: "toca",
+      publication: {
+        state: "draft",
+        editableRevision: 17,
+        publishedRevision: 16,
+      },
+    };
+    const ctx = {
+      content: root,
+      api: async (_url: string, request: { body: string }) => {
+        const input = JSON.parse(request.body);
+        calls.push(input);
+        if (input.action === "publish")
+          detail.publication.publishedRevision = input.expectedRevision;
+      },
+    };
+    runInNewContext(
+      source.replace(/^export /gm, "") +
+        "\n renderBusinessCms = async () => {}; bindDetail(root, ctx, detail);",
+      { root, ctx, detail },
+    );
+    expect(calls).toHaveLength(0);
+    await buttons[0]?.listener?.();
+    expect(calls).toEqual([{ action: "review", expectedRevision: 17 }]);
+    expect(detail.publication.publishedRevision).toBe(16);
+    expect(result.textContent).toContain("Agora clique em Publicar revisão");
+    await buttons[1]?.listener?.();
+    expect(calls).toEqual([
+      { action: "review", expectedRevision: 17 },
+      { action: "publish", expectedRevision: 17 },
+    ]);
+    expect(detail.publication.publishedRevision).toBe(17);
+    expect(result.textContent).toBe("Revisão publicada no mapa.");
+  });
+
+  it("keeps publication actions visible before the overflowing mobile tabs", () => {
+    const markup = String(
+      runInNewContext(
+        source.replace(/^export /gm, "") +
+          '\n detailTabs({businessId:"toca",publication:{state:"draft",editableRevision:17,publishedRevision:16},catalog:{products:[{status:"draft"}]}}, String, true)',
+      ),
+    );
+    expect(markup.indexOf("data-business-publication-summary")).toBeLessThan(
+      markup.indexOf('role="tablist"'),
+    );
+    expect(markup.match(/data-business-publication="review"/g)).toHaveLength(1);
+    expect(markup.match(/data-business-publication="publish"/g)).toHaveLength(
+      1,
+    );
+    expect(markup).toContain(
+      "Há alterações salvas que ainda não estão no mapa.",
+    );
+    expect(markup).toContain("Publicar a empresa não ativa produtos");
+    expect(markup).toMatch(/data-business-publication="publish" disabled/);
+  });
+
+  it("preserves explicit review and capability requirements without publishing on save", () => {
+    const render = (state: string, canMutate: boolean) =>
+      String(
+        runInNewContext(
+          source.replace(/^export /gm, "") +
+            "\n publicationSummary(detail, String, canMutate)",
+          {
+            detail: {
+              publication: {
+                state,
+                editableRevision: 17,
+                publishedRevision: 16,
+              },
+            },
+            canMutate,
+          },
+        ),
+      );
+    expect(render("review", true)).toMatch(
+      /data-business-publication="review" disabled/,
+    );
+    expect(render("review", true)).toMatch(
+      /data-business-publication="publish" >Publicar/,
+    );
+    expect(render("draft", false)).not.toContain(
+      'data-business-publication="publish"',
+    );
+    expect(source).toContain(
+      "expectedRevision: detail.publication.editableRevision",
+    );
+  });
+
   it("pairs every tab with its named panel and starts with one Tab stop", () => {
     const markup: unknown = runInNewContext(
       source.replace(/^export /gm, "") +
