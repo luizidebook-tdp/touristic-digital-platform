@@ -105,6 +105,9 @@ test("MySQL1 keeps the union of legacy triggers for Affiliates and Catalog draft
       "apps/morro-digital-platform/tooling/catalog-platform-runtime.mjs",
       "apps/morro-digital-platform/tooling/control-center-catalog-drafts.mysql.mjs",
       "apps/morro-digital-platform/tooling/place-platform-runtime.mjs",
+      "packages/business/src/place-action-registry.ts",
+      "packages/business/src/place-action-registry.test.ts",
+      "packages/business/src/public-place-projection.ts",
     ],
   };
   for (const [workflow, paths] of Object.entries(contracts)) {
@@ -924,5 +927,51 @@ test("UI2 preserves each original trigger path without bypassing classification"
         assert.deepEqual(selectSuites(report), []);
       else assert.ok(selectSuites(report).includes(workflow), file);
     }
+  }
+});
+
+test("published catalog business paths trigger the existing real catalog acceptance suite", () => {
+  const workflow = "control-center-catalog-drafts.yml";
+  const paths = [
+    "packages/business/src/place-action-registry.ts",
+    "packages/business/src/place-action-registry.test.ts",
+    "packages/business/src/public-place-projection.ts",
+  ];
+  const suite = suiteManifest.suites.find(
+    (entry) => entry.workflow === workflow,
+  );
+  assert.ok(suite);
+  for (const file of paths) {
+    assert.ok(suite.paths.includes(file));
+    const report = analyzeFiles([file]);
+    assert.equal(report.classificationBlocked, false);
+    assert.ok(selectSuites(report).includes(workflow));
+    const withoutMapping = {
+      ...suiteManifest,
+      suites: suiteManifest.suites.map((entry) =>
+        entry.workflow === workflow
+          ? {
+              ...entry,
+              paths: entry.paths.filter((path) => !paths.includes(path)),
+            }
+          : entry,
+      ),
+    };
+    assert.throws(
+      () => selectSuites(report, withoutMapping),
+      (error) => error.message === "CI_SUITE_COVERAGE_UNPROVEN:" + file,
+    );
+  }
+  // The unit-test path schedules acceptance; this does not claim the workflow
+  // executes that unit file. Unit coverage remains a separate quality proof.
+  const uncovered = "packages/business/src/unmapped-catalog-runtime.ts";
+  for (const files of [
+    [paths[0], uncovered],
+    [uncovered, paths[0]],
+  ]) {
+    assert.throws(
+      () => selectSuites(analyzeFiles(files)),
+      (error) => error.message === "CI_SUITE_COVERAGE_UNPROVEN:" + uncovered,
+    );
   }
 });

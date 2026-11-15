@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-CONTROL-CENTER-CATALOG-SUITE-20261115",
+  "objective": "route-three-business-catalog-paths-to-existing-control-center-catalog-drafts-proof-without-changing-workflows-or-reducing-required-evidence",
+  "baseSha": "467efeee27b5b02e211f998faf0b0d25b20a8ef7",
+  "branch": "fix/control-center-catalog-suite-20261115",
+  "state": "LOCAL_PROVEN",
+  "risk": "high",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-CONTROL-CENTER-CATALOG-SUITE-20261115.json",
+      "tooling/ci/scheduled-suites.json",
+      "tooling/ci/suite-scheduler.test.mjs"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity",
+    "owner-scope-resolution"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": ["changeset", "git-identity", "ownership", "proof-plan"]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 300
+    },
+    "commands": [
+      {
+        "id": "central-catalog-suite-coverage",
+        "argv": ["node", "--test", "tooling/ci/suite-scheduler.test.mjs"],
+        "timeoutSeconds": 180
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
