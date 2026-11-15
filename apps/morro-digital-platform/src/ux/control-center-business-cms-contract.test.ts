@@ -11,6 +11,80 @@ const source = readFileSync(
 );
 
 describe("Control Center Business CMS contract", () => {
+  it("offers only explicit catalogue buttons and restores checked values from the editable profile", () => {
+    const render = (canMutate: boolean) =>
+      String(
+        runInNewContext(
+          source.replace(/^export /gm, "") +
+            '\n detailTabs({businessId:"toca",profile:{catalogCapabilities:["products","menu"]}}, String, canMutate)',
+          { canMutate },
+        ),
+      );
+    const markup = render(true);
+    expect(markup.match(/name="catalogCapabilities"/g)).toHaveLength(3);
+    expect(markup).toMatch(
+      /name="catalogCapabilities" value="products" checked/,
+    );
+    expect(markup).toMatch(/name="catalogCapabilities" value="menu" checked/);
+    expect(markup).not.toMatch(
+      /name="catalogCapabilities" value="offers" checked/,
+    );
+    expect(markup).not.toMatch(/name="catalogCapabilities" value="tickets"/);
+    expect(render(false)).toMatch(
+      /name="catalogCapabilities" value="products" checked disabled/,
+    );
+  });
+
+  it("submits the complete explicit checkbox subset including an empty opt-out", async () => {
+    for (const selected of [["products", "offers"], []]) {
+      let listener: null | ((event: unknown) => Promise<void>) = null;
+      const form = {
+        addEventListener(_name: string, fn: typeof listener) {
+          listener = fn;
+        },
+      };
+      const result = { textContent: "" };
+      const requests: Array<{ url: string; body: Record<string, unknown> }> =
+        [];
+      const root = {
+        querySelectorAll: () => [],
+        querySelector: (selector: string) =>
+          selector === "#business-cms-profile-form"
+            ? form
+            : selector === "#business-cms-profile-result"
+              ? result
+              : null,
+      };
+      const ctx = {
+        content: root,
+        api: async (url: string, request: { body: string }) => {
+          requests.push({ url, body: JSON.parse(request.body) });
+        },
+      };
+      class FormDataFixture {
+        *[Symbol.iterator]() {
+          yield ["name", "Toca"];
+          for (const value of selected) yield ["catalogCapabilities", value];
+        }
+        getAll(name: string) {
+          return name === "catalogCapabilities" ? selected : [];
+        }
+      }
+      runInNewContext(
+        source.replace(/^export /gm, "") +
+          '\n renderBusinessCms=async()=>{};bindDetail(root,ctx,{businessId:"toca"});',
+        { root, ctx, FormData: FormDataFixture },
+      );
+      await listener?.({ currentTarget: form, preventDefault() {} });
+      expect(requests).toEqual([
+        {
+          url: "/businesses/toca/cms/profile",
+          body: { name: "Toca", catalogCapabilities: selected },
+        },
+      ]);
+    }
+  });
+
   it("does not offer ignored active or available values when creating catalogue items", () => {
     const markup = String(
       runInNewContext(

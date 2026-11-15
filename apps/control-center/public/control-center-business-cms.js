@@ -410,6 +410,20 @@ function detailTabs(detail, escapeHtml, canMutate) {
           <label>Descrição completa<textarea name="description" rows="6" ${canMutate ? "" : "disabled"}>${escapeHtml(profile.description ?? "")}</textarea></label>
           <label>Tags<input name="tags" value="${escapeHtml(safeArray(profile.tags).join(", "))}" ${canMutate ? "" : "disabled"} /></label>
           <label>Amenities<input name="amenities" value="${escapeHtml(safeArray(profile.amenities).join(", "))}" ${canMutate ? "" : "disabled"} /></label>
+          <fieldset>
+            <legend>Botões de catálogo no mapa</legend>
+            <p>Escolha quais botões habilitar. Eles só aparecem com conteúdo ativo após revisão e publicação da empresa.</p>
+            ${[
+              ["products", "Ver produtos"],
+              ["offers", "Ver ofertas"],
+              ["menu", "Ver cardápio"],
+            ]
+              .map(
+                ([value, label]) =>
+                  `<label><input type="checkbox" name="catalogCapabilities" value="${value}" ${safeArray(profile.catalogCapabilities).includes(value) ? "checked" : ""} ${canMutate ? "" : "disabled"} /> ${label}</label>`,
+              )
+              .join("")}
+          </fieldset>
           ${canMutate ? '<div><button class="primary-button" type="submit">Salvar perfil</button></div>' : ""}
         </form>
         <p id="business-cms-profile-result" role="status"></p>
@@ -876,6 +890,9 @@ function bindDetail(root, ctx, detail) {
 
       try {
         const body = Object.fromEntries(new FormData(event.currentTarget));
+        body.catalogCapabilities = new FormData(event.currentTarget).getAll(
+          "catalogCapabilities",
+        );
         result.textContent = "Salvando…";
         await ctx.api(businessCmsContract.updateProfile(detail.businessId), {
           method: "PUT",
