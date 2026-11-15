@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-CONTROL-CENTER-CATALOG-20261115",
+  "objective": "restore-control-center-publication-access-and-published-business-products-offers-map-actions-with-exact-business-ownership-preserving-auth-and-tenant-boundaries",
+  "baseSha": "51a00fa73796688ca84163960b7c2eae8da2de20",
+  "branch": "fix/control-center-catalog-20261115",
+  "state": "IMPLEMENTING",
+  "risk": "critical",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      "apps/control-center/public/control-center-business-cms.js",
+      "apps/morro-digital-platform/public/tourist-shell-v2.css",
+      "apps/morro-digital-platform/src/map/explore-locations-control.test.ts",
+      "apps/morro-digital-platform/src/map/explore-locations-control.ts",
+      "apps/morro-digital-platform/src/map/public-place-catalog-presentation.ts",
+      "apps/morro-digital-platform/src/ux/control-center-business-cms-contract.test.ts",
+      "apps/morro-digital-platform/tooling/catalog-platform-runtime.mjs",
+      "apps/morro-digital-platform/tooling/public-place-catalog-presentation.test.mjs",
+      "packages/business/src/place-action-registry.test.ts",
+      "packages/business/src/place-action-registry.ts",
+      "packages/business/src/public-place-projection.ts",
+      ".morro/ownership.json",
+      "tooling/fabric/ownership-path.test.mjs",
+      ".morro/changesets/MD-CONTROL-CENTER-CATALOG-20261115.json"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["platform-authz", "TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "full-quality",
+    "domain-invariants",
+    "integration",
+    "exact-head-release-gates",
+    "automated-independent-proof",
+    "exact-head-identity",
+    "owner-scope-resolution"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "dependencies",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 600
+    },
+    "commands": [
+      {
+        "id": "ownership-and-claim-invariants",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/fabric/ownership-path.test.mjs",
+          "tooling/fabric/claim-guard.test.mjs"
+        ],
+        "timeoutSeconds": 600
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
