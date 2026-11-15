@@ -833,3 +833,59 @@ test("local assistant profile ownership adds only two exact map paths", () => {
     );
   }
 });
+
+test("CRM storage ownership is limited to two exact auth paths without widening authority", () => {
+  const canonical = JSON.parse(readFileSync(".morro/ownership.json", "utf8"));
+  const paths = [
+    "services/crm/src/crm-storage-adapter.ts",
+    "services/crm/src/crm-storage-adapter.test.ts",
+  ];
+  const owners = (file, registry) =>
+    registry.domains
+      .filter((domain) =>
+        domain.pathPrefixes.some((prefix) =>
+          prefix.endsWith("/") ? file.startsWith(prefix) : file === prefix,
+        ),
+      )
+      .map((domain) => domain.id);
+  const before = structuredClone(canonical);
+  before.domains.find((domain) => domain.id === "auth").pathPrefixes =
+    before.domains
+      .find((domain) => domain.id === "auth")
+      .pathPrefixes.filter((path) => !paths.includes(path));
+  for (const path of paths) {
+    assert.deepEqual(owners(path, canonical), ["auth"], path);
+    assert.deepEqual(owners(path, before), [], path);
+    assert.deepEqual(assertOwnershipCoverage([path], canonical), {
+      covered: 1,
+    });
+    for (const alias of [
+      path + ".backup",
+      path + "/nested.ts",
+      path.replace(/\.ts$/u, "-other.ts"),
+    ]) {
+      assert.deepEqual(owners(alias, canonical), [], alias);
+      assert.throws(
+        () => assertOwnershipCoverage([alias], canonical),
+        /FAST_GATE_OWNERSHIP_UNCOVERED/u,
+      );
+    }
+  }
+  assert.deepEqual(
+    canonical.domains.find((domain) => domain.id === "auth").contracts,
+    ["platform-authz"],
+  );
+  assert.equal(
+    JSON.parse(readFileSync(".morro/risk-policy.json", "utf8"))
+      .semanticRiskFloor["platform-authz"],
+    "critical",
+  );
+  for (const path of execFileSync("git", ["ls-files", "-z"], {
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter(Boolean)) {
+    if (!paths.includes(path))
+      assert.deepEqual(owners(path, canonical), owners(path, before), path);
+  }
+});
