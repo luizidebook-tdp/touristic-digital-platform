@@ -4,7 +4,7 @@
   "objective": "bind-actions-staging-deployment-evidence-to-luizidebook-tdp-immutable-image-without-changing-circleci-production-or-release-guards",
   "baseSha": "bfad8d6938db14b3f6e6dcc3a1352bdb802b9f32",
   "branch": "fix/staging-oci-owner-migration-20261115",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
