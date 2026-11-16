@@ -124,32 +124,6 @@
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-16T23:00:00.000Z"
     },
-    "MD-CONTROL-CENTER-CATALOG-20261115": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "fix/control-center-catalog-20261115",
-      "baseSha": "e60ac7c9fc059514a01535800fce6311e4e97945",
-      "paths": [
-        "apps/control-center/public/control-center-business-cms.js",
-        "apps/morro-digital-platform/public/tourist-shell-v2.css",
-        "apps/morro-digital-platform/src/map/explore-locations-control.test.ts",
-        "apps/morro-digital-platform/src/map/explore-locations-control.ts",
-        "apps/morro-digital-platform/src/map/public-place-catalog-presentation.ts",
-        "apps/morro-digital-platform/src/ux/control-center-business-cms-contract.test.ts",
-        "apps/morro-digital-platform/tooling/catalog-platform-runtime.mjs",
-        "apps/morro-digital-platform/tooling/public-place-catalog-presentation.test.mjs",
-        "packages/business/src/place-action-registry.test.ts",
-        "packages/business/src/place-action-registry.ts",
-        "packages/business/src/public-place-projection.ts",
-        ".morro/ownership.json",
-        "tooling/fabric/ownership-path.test.mjs",
-        ".morro/changesets/MD-CONTROL-CENTER-CATALOG-20261115.json"
-      ],
-      "domains": ["auth", "business", "map", "ci-release"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-16T23:00:00.000Z"
-    },
     "MD-CONTROL-CENTER-CATALOG-IMPACT-20261115": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
