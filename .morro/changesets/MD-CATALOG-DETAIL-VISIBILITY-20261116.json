@@ -4,7 +4,7 @@
   "objective": "restore-scrollable-place-catalog-details-by-excluding-detail-state-from-compact-clipping-preserving-canonical-id-voice-and-browser-contracts",
   "baseSha": "b3eb1e9a01961efd7aef877c1d8ffb5a236fe525",
   "branch": "fix/catalog-detail-visibility-20261116",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "high",
   "scope": "DESTINATION:MORRO",
   "owns": {
