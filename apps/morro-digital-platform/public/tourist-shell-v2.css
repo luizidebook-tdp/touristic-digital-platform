@@ -2773,7 +2773,8 @@ html[dir="rtl"]
   padding: 0.25rem 0.75rem;
 }
 
-#unified-assistant-dock #assistant-category-results-message {
+#unified-assistant-dock
+  #assistant-category-results-message:not(.md-assistant-place-detail-message) {
   box-sizing: border-box;
   width: 100%;
   min-height: 2.5rem;
