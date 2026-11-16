@@ -1918,3 +1918,19 @@ it("preserves the current catalog section during locale refresh", async () => {
   await settleDetailRefresh();
   expect(consumer.messages.at(-1)?.description).toContain("Product en");
 });
+
+describe("place catalog detail visibility", () => {
+  it("keeps the canonical detail id while excluding it from compact clipping", () => {
+    const css = readFileSync(
+      new URL("../../public/tourist-shell-v2.css", import.meta.url),
+      "utf8",
+    );
+    expect(css).not.toMatch(/#assistant-category-results-message\s*\{/u);
+    expect(css).toMatch(
+      /#assistant-category-results-message:not\(\.md-assistant-place-detail-message\)\s*\{[^}]*max-height: 3\.25rem;[^}]*overflow: hidden;/u,
+    );
+    expect(css).toMatch(
+      /\.messages-area\.md-assistant-message-scroll\s*\{[^}]*overflow-y: auto;/u,
+    );
+  });
+});

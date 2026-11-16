@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "MD-CATALOG-DETAIL-VISIBILITY-20261116",
   "objective": "restore-scrollable-place-catalog-details-by-excluding-detail-state-from-compact-clipping-preserving-canonical-id-voice-and-browser-contracts",
-  "baseSha": "f33aa3f9145d981e9c42d138fa8aeed04652f422",
+  "baseSha": "b3eb1e9a01961efd7aef877c1d8ffb5a236fe525",
   "branch": "fix/catalog-detail-visibility-20261116",
   "state": "IMPLEMENTING",
   "risk": "high",
