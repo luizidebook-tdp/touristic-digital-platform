@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-PICOMATCH-VENDOR-20261117",
+  "objective": "register-reproducible-picomatch-parser-component-with-explicit-file-ownership-before-dependent-security-override",
+  "baseSha": "26ef59fd05a678bbe89c31f24d7a22f3d00ebd87",
+  "branch": "chore/acquire-picomatch-vendor-20261117",
+  "state": "IMPLEMENTING",
+  "risk": "critical",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-PICOMATCH-VENDOR-20261117.json",
+      "tooling/quality/vendor/picomatch/README.md",
+      "tooling/quality/vendor/picomatch/provenance.json",
+      "tooling/quality/vendor/picomatch/rebuild.mjs",
+      "tooling/quality/vendor/picomatch/security.patch",
+      "tooling/quality/vendor/picomatch/picomatch-4.0.7-upstream.tgz",
+      "tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz",
+      "tooling/quality/vendor/picomatch/fork.test.mjs"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "full-quality",
+    "domain-invariants",
+    "integration",
+    "exact-head-release-gates",
+    "format",
+    "secrets",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "dependencies",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 2,
+      "maxSeconds": 600
+    },
+    "commands": [
+      {
+        "id": "picomatch-component-proof",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/quality/vendor/picomatch/fork.test.mjs"
+        ],
+        "timeoutSeconds": 300
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}

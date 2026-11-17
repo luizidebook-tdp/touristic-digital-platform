@@ -206,6 +206,26 @@
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-19T23:00:00.000Z"
+    },
+    "MD-PICOMATCH-VENDOR-20261117": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "chore/acquire-picomatch-vendor-20261117",
+      "baseSha": "26ef59fd05a678bbe89c31f24d7a22f3d00ebd87",
+      "paths": [
+        ".morro/changesets/MD-PICOMATCH-VENDOR-20261117.json",
+        "tooling/quality/vendor/picomatch/README.md",
+        "tooling/quality/vendor/picomatch/provenance.json",
+        "tooling/quality/vendor/picomatch/rebuild.mjs",
+        "tooling/quality/vendor/picomatch/security.patch",
+        "tooling/quality/vendor/picomatch/picomatch-4.0.7-upstream.tgz",
+        "tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz",
+        "tooling/quality/vendor/picomatch/fork.test.mjs"
+      ],
+      "domains": ["ci-release"],
+      "risk": "P0",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-19T23:00:00.000Z"
     }
   }
 }
