@@ -1,3 +1,4 @@
+import type { PublicPlaceMediaProjection } from "@touristic/business";
 import { publicPlaceCatalogText } from "./public-place-catalog-presentation.js";
 import { readFileSync } from "node:fs";
 import { compileFunction } from "node:vm";
@@ -31,6 +32,9 @@ import {
 } from "./explore-locations-v1-flow.js";
 
 import {
+  createPlaceDetailMedia,
+  normalizePlaceDetailImageSource,
+  resolvePlaceDetailMedia,
   appliedMapFilterSummary,
   createExploreLocationDetailsCommand,
   type ExternalTourMapPreparation,
@@ -413,7 +417,10 @@ interface PlaceDetailConsumer {
   document: Document;
   conversation: AssistantConversationOrchestrator;
   presenter(): Record<string, string>;
+  media(): { state: string; src?: string } | undefined;
+  detailOrder(): string[];
   setPresenterData(values: Record<string, string>): void;
+  setAssistantHidden(hidden: boolean): void;
   select(location: ExploreSearchResult): Promise<void>;
   changeLocale(locale: string): void;
   execute(command: ExploreLocationsCommand): Promise<boolean>;
@@ -440,6 +447,7 @@ interface PlaceDetailConsumer {
 function actualPlaceDetailConsumer(
   locale: "pt" | "en" | "es" | "he",
   getDetail: (placeId: string, options: { locale: string }) => unknown,
+  styleReady?: Promise<void>,
 ): PlaceDetailConsumer {
   const sourcePath = new URL("./explore-locations-control.ts", import.meta.url);
   const ast = ts.createSourceFile(
@@ -492,7 +500,9 @@ function actualPlaceDetailConsumer(
   // are fixtures; the ID, generation, copy and dispatch decisions are real.
   const javascript = ts.transpileModule(
     `
-      const {publicPlaceCatalogText,locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator}=dependencies;
+      const {createPlaceDetailMedia,styleReady,publicPlaceCatalogText,locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator}=dependencies;
+      let styleGeneration=0;
+      const placeDetailStyles={cancel(){styleGeneration++;},run(action){const generation=++styleGeneration;if(styleReady)void styleReady.then(()=>{if(generation===styleGeneration)action()}).catch(()=>{});else action();}};
       let activePlace,activePlaceLocation,activePlaceDetail,activeCategory,activeStage="menu",interactionGeneration=0;
       let refreshSavedPlaceActions=()=>{};
       let activePlaceActionValues=[],datasetCriteria=[],mapCalls=0,detailRequests=0;
@@ -502,6 +512,7 @@ function actualPlaceDetailConsumer(
       const elements=new Map();
       class HTMLElement {
         constructor(){this.dataset={};this.textContent="";this.children=[];this.classList={remove(){},add(){}};}
+        getAttribute(name){return this[name]??null;}
         setAttribute(name,value){this[name]=value;if(name.startsWith("data-"))this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;}
         removeAttribute(name){delete this[name];if(name.startsWith("data-"))delete this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())];}
         appendChild(node){this.children.push(node);if(node.id)elements.set(node.id,node);}
@@ -512,6 +523,7 @@ function actualPlaceDetailConsumer(
             messages.push({name:nodes[0]?.textContent??"",description:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.textContent??"",lineBreaks:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.children.filter(n=>n.tagName==="br").length??0});
           }
         }
+        addEventListener(){}
         remove(){elements.delete(this.id);}
       }
       class HTMLButtonElement extends HTMLElement {}
@@ -563,12 +575,17 @@ function actualPlaceDetailConsumer(
         changeLocale:locale=>{document.documentElement.lang=locale;localeObserver.callback([{attributeName:"lang"}]);},
         conversation:getAssistantConversationOrchestrator(document),
         presenter:()=>({...elements.get(ASSISTANT_FLOW_MESSAGE_ID)?.dataset}),
+        setAssistantHidden:(hidden)=>{let el=elements.get("assistant-messages");if(!el){el=new HTMLElement();elements.set("assistant-messages",el);}el.setAttribute("aria-hidden",String(hidden));},
+        detailOrder:()=>elements.get(ASSISTANT_FLOW_MESSAGE_ID)?.children.map(node=>node.className)??[],
+        media:()=>{const figure=elements.get(ASSISTANT_FLOW_MESSAGE_ID)?.children.find(node=>node.className==="md-place-detail-media");return figure?{state:figure.dataset.mediaState,src:figure.children.find(node=>node.tagName==="img")?.src}:undefined;},
         setPresenterData:values=>Object.assign(elements.get(ASSISTANT_FLOW_MESSAGE_ID).dataset,values),
         snapshot:()=>({place:activePlace,stage:activeStage,generation:interactionGeneration,mapCalls,detailRequests,positionRequests})};
     `,
     { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
   ).outputText;
   const dependencies = {
+    styleReady,
+    createPlaceDetailMedia,
     publicPlaceCatalogText,
     locale,
     getDetail,
@@ -1932,5 +1949,579 @@ describe("place catalog detail visibility", () => {
     expect(css).toMatch(
       /\.messages-area\.md-assistant-message-scroll\s*\{[^}]*overflow-y: auto;/u,
     );
+  });
+});
+
+describe("manual visual pilot in the active detail flow", () => {
+  const photoDetail = (id: string) => ({
+    ...canonicalDetail(id),
+    media: {
+      placeId: id,
+      coverImage: {
+        providerReference: `/images/${id}.jpg`,
+        alt: `Photo ${id}`,
+      },
+      gallery: [],
+    },
+  });
+
+  it("uses the confirmed place media on explicit details without changing the map", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", photoDetail);
+    await consumer.select(canonicalLocation("place-a"));
+    expect(consumer.media()).toBeUndefined();
+    const before = consumer.snapshot();
+    consumer.click("place-action:info:place-a");
+    expect(consumer.media()).toEqual({
+      state: "ready",
+      src: "/images/place-a.jpg",
+    });
+    expect(consumer.presenter().placeDetailVisual).toBe("true");
+    expect(consumer.detailOrder()).toEqual([
+      "md-assistant-place-detail-title",
+      "md-place-detail-media",
+      "md-assistant-place-detail-meta",
+      "md-assistant-place-detail-description",
+    ]);
+    expect(consumer.snapshot()).toEqual(before);
+    await consumer.select(canonicalLocation("place-b"));
+    expect(consumer.media()).toBeUndefined();
+    expect(consumer.presenter().placeDetailVisual).toBeUndefined();
+    consumer.click("place-action:info:place-b");
+    expect(consumer.media()?.src).toBe("/images/place-b.jpg");
+  });
+
+  it.each(["beaches", "restaurants", "nightlife"] as const)(
+    "keeps related tours out of the %s place detail",
+    async (category) => {
+      const consumer = actualPlaceDetailConsumer("pt", photoDetail);
+      await consumer.select({ ...canonicalLocation("place-a"), category });
+      consumer.click("place-action:info:place-a");
+      expect(consumer.detailOrder()).toEqual([
+        "md-assistant-place-detail-title",
+        "md-place-detail-media",
+        "md-assistant-place-detail-meta",
+        "md-assistant-place-detail-description",
+      ]);
+      expect(
+        consumer.rails
+          .at(-1)
+          ?.some(({ label, value }) =>
+            /passeios|related tours|tour\./iu.test(`${label} ${value}`),
+          ),
+      ).toBe(false);
+    },
+  );
+
+  it("waits for feature CSS before presenting a rich detail", async () => {
+    let ready!: () => void;
+    const styles = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const consumer = actualPlaceDetailConsumer("pt", photoDetail, styles);
+    await consumer.select(canonicalLocation("place-a"));
+    consumer.click("place-action:info:place-a");
+    expect(consumer.media()).toBeUndefined();
+    ready();
+    await styles;
+    expect(consumer.media()?.src).toBe("/images/place-a.jpg");
+  });
+
+  it.each([
+    "selection",
+    "locale",
+    "action",
+    "conversation",
+    "minimize",
+  ] as const)(
+    "does not reopen stale details after CSS resolves following a %s change",
+    async (change) => {
+      let ready!: () => void;
+      const styles = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      const consumer = actualPlaceDetailConsumer("pt", photoDetail, styles);
+      await consumer.select(canonicalLocation("place-a"));
+      consumer.click("place-action:info:place-a");
+      if (change === "selection")
+        await consumer.select(canonicalLocation("place-b"));
+      if (change === "locale") consumer.changeLocale("en");
+      if (change === "action") consumer.click("ver fotos");
+      if (change === "conversation") consumer.conversation.issueSequence();
+      if (change === "minimize") consumer.setAssistantHidden(true);
+      ready();
+      await styles;
+      expect(consumer.media()).toBeUndefined();
+    },
+  );
+
+  it.each([false, true])(
+    "allows explicit details from a hidden panel (deferred CSS=%s)",
+    async (deferred) => {
+      let ready!: () => void;
+      const styles = deferred
+        ? new Promise<void>((resolve) => {
+            ready = resolve;
+          })
+        : undefined;
+      const consumer = actualPlaceDetailConsumer("pt", photoDetail, styles);
+      await consumer.select(canonicalLocation("place-a"));
+      consumer.setAssistantHidden(true);
+      consumer.click("place-action:info:place-a");
+      if (styles) {
+        ready();
+        await styles;
+      }
+      expect(consumer.media()?.src).toBe("/images/place-a.jpg");
+    },
+  );
+
+  it("does not present rich detail when the stylesheet fails", async () => {
+    let fail!: () => void;
+    const styles = new Promise<void>((_, reject) => {
+      fail = () => reject(new Error("styles unavailable"));
+    });
+    const consumer = actualPlaceDetailConsumer("pt", photoDetail, styles);
+    await consumer.select(canonicalLocation("place-a"));
+    consumer.click("place-action:info:place-a");
+    fail();
+    await styles.catch(() => undefined);
+    expect(consumer.media()).toBeUndefined();
+  });
+
+  it("rejects another place's media and uses a neutral fallback", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) => ({
+      ...photoDetail(id),
+      media: photoDetail("wrong-place").media,
+    }));
+    await consumer.select(canonicalLocation("place-a"));
+    consumer.click("place-action:info:place-a");
+    expect(consumer.media()?.state).toBe("missing");
+    expect(consumer.media()?.src).toBeUndefined();
+  });
+
+  it("ignores stale media when a same-named place is selected while loading", async () => {
+    let release!: (value: ReturnType<typeof photoDetail>) => void;
+    const waiting = new Promise<ReturnType<typeof photoDetail>>((resolve) => {
+      release = resolve;
+    });
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      id === "place-a" ? waiting : photoDetail(id),
+    );
+    const first = consumer.select(canonicalLocation("place-a"));
+    await consumer.select(canonicalLocation("place-b"));
+    release(photoDetail("place-a"));
+    await first;
+    consumer.click("place-action:info:place-b");
+    expect(consumer.media()?.src).toBe("/images/place-b.jpg");
+  });
+});
+
+// Media and layout contracts stay beside their owning active controller.
+describe("canonical detail media presentation", () => {
+  const media = (
+    reference = "/images/toca.jpg",
+  ): PublicPlaceMediaProjection => ({
+    placeId: "place-toca",
+    coverImage: {
+      mediaId: "published-photo",
+      provider: "cms",
+      providerReference: reference,
+      mimeType: "image/jpeg",
+      width: 350,
+      height: 220,
+      alt: "Toca do Morcego",
+    },
+    gallery: [],
+    logo: null,
+  });
+
+  class ElementFixture {
+    className = "";
+    textContent = "";
+    hidden = false;
+    alt = "";
+    src = "";
+    loading = "";
+    decoding = "";
+    dataset: Record<string, string> = {};
+    children: ElementFixture[] = [];
+    parent: ElementFixture | undefined;
+    listeners = new Map<string, () => void>();
+    constructor(readonly tagName: string) {}
+    appendChild(child: ElementFixture) {
+      child.parent = this;
+      this.children.push(child);
+    }
+    addEventListener(name: string, callback: () => void) {
+      this.listeners.set(name, callback);
+    }
+    remove() {
+      if (this.parent)
+        this.parent.children = this.parent.children.filter(
+          (node) => node !== this,
+        );
+    }
+  }
+  const dom = () => ({
+    document: {
+      createElement: (tag: string) => new ElementFixture(tag),
+    } as unknown as Document,
+    parent: new ElementFixture("div"),
+  });
+
+  describe("published place detail media", () => {
+    it.each([
+      "javascript:alert(1)",
+      "data:image/svg+xml,test",
+      "http://example.com/photo.jpg",
+      "//example.com/photo.jpg",
+      "/\\example.com/photo.jpg",
+      "https://user:password@example.com/photo.jpg",
+      "https://example.com/a\nb.jpg",
+      "https://example.com/a b.jpg",
+      "relative/photo.jpg",
+      "https:example.com/photo.jpg",
+      "https:/example.com/photo.jpg",
+      "",
+      null,
+      {},
+    ])("rejects unsafe or ambiguous image reference %s", (source) => {
+      expect(normalizePlaceDetailImageSource(source)).toBeNull();
+    });
+
+    it.each([
+      [" /images/toca.jpg ", "/images/toca.jpg"],
+      ["https://example.com/a%20b.jpg", "https://example.com/a%20b.jpg"],
+    ])("accepts an explicit safe reference %s", (source, normalized) => {
+      expect(normalizePlaceDetailImageSource(source)).toBe(normalized);
+    });
+
+    it("does not reuse media from a same-named but different place", () => {
+      expect(
+        resolvePlaceDetailMedia(media(), "place-other", "Toca"),
+      ).toBeNull();
+      expect(resolvePlaceDetailMedia(media(), "", "Toca")).toBeNull();
+    });
+
+    it("uses a published gallery image when the cover reference is unusable", () => {
+      const input = media("javascript:alert(1)");
+      const galleryImage = { ...media().coverImage!, alt: "" };
+      expect(
+        resolvePlaceDetailMedia(
+          { ...input, gallery: [galleryImage] },
+          "place-toca",
+          "Toca",
+        ),
+      ).toEqual({ src: "/images/toca.jpg", alt: "Toca" });
+    });
+
+    it.each([
+      ["pt", "Foto não disponível"],
+      ["en", "Photo unavailable"],
+      ["es", "Foto no disponible"],
+      ["he", "התמונה אינה זמינה"],
+    ] as const)(
+      "uses a neutral fallback in %s without fetching another photo",
+      (locale, text) => {
+        const fixture = dom();
+        fixture.parent.appendChild(
+          createPlaceDetailMedia(
+            fixture.document,
+            null,
+            "place-toca",
+            "Toca",
+            locale,
+          ) as unknown as ElementFixture,
+        );
+        const figure = fixture.parent.children[0]!;
+        expect(figure.className).toBe("md-place-detail-media");
+        expect(figure.dataset.mediaState).toBe("missing");
+        expect(figure.children.map((node) => node.tagName)).toEqual(["span"]);
+        expect(figure.children[0]!.textContent).toBe(text);
+        expect(figure.children[0]!.hidden).toBe(false);
+      },
+    );
+
+    it("shows the canonical image and recovers from an image load failure", () => {
+      const fixture = dom();
+      fixture.parent.appendChild(
+        createPlaceDetailMedia(
+          fixture.document,
+          media(),
+          "place-toca",
+          "Toca",
+          "pt",
+        ) as unknown as ElementFixture,
+      );
+      const figure = fixture.parent.children[0]!;
+      const image = figure.children[0]!;
+      const fallback = figure.children[1]!;
+      expect(image.src).toBe("/images/toca.jpg");
+      expect(image.alt).toBe("Toca do Morcego");
+      expect(image.loading).toBe("lazy");
+      expect(fallback.hidden).toBe(true);
+      image.listeners.get("error")!();
+      expect(figure.children).toEqual([fallback]);
+      expect(fallback.hidden).toBe(false);
+      expect(figure.dataset.mediaState).toBe("missing");
+    });
+
+    it("does not insert strings as HTML or create actions", () => {
+      const fixture = dom();
+      fixture.parent.appendChild(
+        createPlaceDetailMedia(
+          fixture.document,
+          media(),
+          "place-toca",
+          "<script>alert(1)</script>",
+          "pt",
+        ) as unknown as ElementFixture,
+      );
+      expect(fixture.parent.children).toHaveLength(1);
+      expect(
+        fixture.parent.children[0]!.children.map((node) => node.tagName),
+      ).toEqual(["img", "span"]);
+    });
+  });
+});
+describe("canonical detail layout integration", () => {
+  // Exercise the production layout callback, including its observer/resize wiring,
+  // without importing the unrelated shell bootstrap or requiring a browser runtime.
+  const source = ts.createSourceFile(
+    "app-shell.ts",
+    readFileSync(new URL("../layouts/app-shell.ts", import.meta.url), "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const layout = source.statements.find(
+    (statement): statement is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(statement) &&
+      statement.name?.text === "synchronizeAssistantLayout",
+  );
+  if (!layout)
+    throw new Error("Production assistant layout function not found");
+  const compiled = ts.transpileModule(layout.getText(source), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+  class ElementFixture {
+    dataset: Record<string, string> = {};
+    hidden = false;
+    attributes = new Map<string, string>();
+    classes = new Set<string>();
+    classList = {
+      add: (...names: string[]) =>
+        names.forEach((name) => this.classes.add(name)),
+      remove: (...names: string[]) =>
+        names.forEach((name) => this.classes.delete(name)),
+      contains: (name: string) => this.classes.has(name),
+      toggle: (name: string, enabled: boolean) =>
+        enabled ? this.classes.add(name) : this.classes.delete(name),
+    };
+    textContent = "Place description";
+    heading: ElementFixture | null = null;
+    top = 0;
+    getAttribute(name: string) {
+      return this.attributes.get(name) ?? null;
+    }
+    getBoundingClientRect() {
+      return { top: this.top };
+    }
+    querySelector(): ElementFixture | null {
+      return this.heading;
+    }
+  }
+
+  function fixture() {
+    let mutation = () => {};
+    let resize = () => {};
+    let fontsReady = () => {};
+    const messages: ElementFixture[] = [];
+    const area = new ElementFixture();
+    const geometry = { scrollTop: 0, scrollHeight: 1000, clientHeight: 288 };
+    Object.assign(area, geometry, { clientTop: 2 });
+    const scroller = area as ElementFixture &
+      typeof geometry & { clientTop: number };
+    scroller.top = 100;
+    Object.assign(scroller, {
+      querySelectorAll: (selector: string) => {
+        if (selector.startsWith(".message")) return messages;
+        if (selector.includes("data-place-detail-visual")) {
+          return messages.filter(
+            (message) => message.dataset.placeDetailVisual === "true",
+          );
+        }
+        return [];
+      },
+    });
+    const region = new ElementFixture();
+    region.querySelector = () => scroller;
+    const document = {
+      getElementById: () => region,
+      defaultView: {
+        addEventListener: (name: string, callback: () => void) => {
+          if (name === "resize") resize = callback;
+        },
+        MutationObserver: class {
+          constructor(callback: () => void) {
+            mutation = callback;
+          }
+          observe() {}
+        },
+      },
+      fonts: {
+        ready: {
+          then: (callback: () => void) => {
+            fontsReady = callback;
+          },
+        },
+      },
+    };
+    const mount = compileFunction(
+      `${compiled}\nreturn synchronizeAssistantLayout(document);`,
+      ["document", "HTMLElement"],
+    ) as (document: object, element: typeof ElementFixture) => void;
+    function addDetail(offset = 400) {
+      const detail = new ElementFixture();
+      detail.dataset.placeDetailVisual = "true";
+      replaceHeading(detail, offset);
+      messages.push(detail);
+      return detail;
+    }
+    function replaceHeading(detail: ElementFixture, offset: number) {
+      const heading = new ElementFixture();
+      heading.getBoundingClientRect = () => ({
+        top: scroller.top + scroller.clientTop + offset - scroller.scrollTop,
+      });
+      detail.heading = heading;
+    }
+    return {
+      messages,
+      scroller,
+      region,
+      addDetail,
+      replaceHeading,
+      mount: () => mount(document, ElementFixture),
+      mutate: () => mutation(),
+      resize: () => resize(),
+      fontsReady: () => fontsReady(),
+    };
+  }
+
+  describe("canonical place detail scroll ownership", () => {
+    it("anchors the current heading, not history start or content bottom", () => {
+      const f = fixture();
+      f.messages.push(new ElementFixture());
+      f.addDetail(420);
+      f.scroller.scrollTop = 700;
+      f.mount();
+      expect(f.scroller.scrollTop).toBe(420);
+      expect(f.region.classes.has("has-rich-content")).toBe(true);
+      expect(f.region.classes.has("has-overflow")).toBe(true);
+      f.mutate();
+      expect(f.scroller.scrollTop).toBe(420);
+    });
+
+    it("preserves manual reading through mutations, image fallback, fonts and resize", () => {
+      const f = fixture();
+      const detail = f.addDetail();
+      f.mount();
+      f.scroller.scrollTop = 560;
+      detail.textContent = "Photo unavailable; same description";
+      f.mutate();
+      f.scroller.clientHeight = 220;
+      f.resize();
+      f.fontsReady();
+      expect(f.scroller.scrollTop).toBe(560);
+    });
+
+    it("reanchors a new render in the reused presenter, including a same-name place", () => {
+      const f = fixture();
+      const detail = f.addDetail();
+      f.mount();
+      f.scroller.scrollTop = 620;
+      f.replaceHeading(detail, 430);
+      f.mutate();
+      expect(f.scroller.scrollTop).toBe(430);
+      f.scroller.scrollTop = 500;
+      f.mutate();
+      expect(f.scroller.scrollTop).toBe(500);
+    });
+
+    it("reanchors a reused presenter before later conversation history", () => {
+      const f = fixture();
+      const detail = f.addDetail(300);
+      f.mount();
+      f.messages.push(new ElementFixture());
+      f.mutate();
+      expect(f.scroller.scrollTop).toBe(f.scroller.scrollHeight);
+      f.replaceHeading(detail, 320);
+      f.mutate();
+      expect(f.scroller.scrollTop).toBe(320);
+      f.scroller.scrollTop = 410;
+      f.resize();
+      f.mutate();
+      expect(f.scroller.scrollTop).toBe(410);
+    });
+
+    it("anchors a newly inserted detail after initial shell mounting", () => {
+      const f = fixture();
+      f.messages.push(new ElementFixture());
+      f.mount();
+      f.addDetail(510);
+      f.mutate();
+      expect(f.scroller.scrollTop).toBe(510);
+    });
+
+    it("keeps the initial welcome at the top", () => {
+      const f = fixture();
+      const welcome = new ElementFixture();
+      welcome.attributes.set("data-i18n", "assistant_welcome_message");
+      f.messages.push(welcome);
+      f.scroller.scrollTop = 150;
+      f.mount();
+      f.mutate();
+      expect(f.scroller.scrollTop).toBe(0);
+    });
+
+    it("retains bottom scrolling for ordinary messages after a visual detail", () => {
+      const f = fixture();
+      f.addDetail();
+      f.mount();
+      f.messages.push(new ElementFixture());
+      f.mutate();
+      expect(f.scroller.scrollTop).toBe(f.scroller.scrollHeight);
+    });
+
+    it("retains legacy scrolling when the presenter changes to offers", () => {
+      const f = fixture();
+      const detail = f.addDetail();
+      f.mount();
+      delete detail.dataset.placeDetailVisual;
+      f.mutate();
+      expect(f.scroller.scrollTop).toBe(f.scroller.scrollHeight);
+    });
+
+    it.each(["hidden", "class", "aria"])(
+      "does not anchor a %s detail",
+      (mode) => {
+        const f = fixture();
+        const detail = f.addDetail();
+        if (mode === "hidden") detail.hidden = true;
+        if (mode === "class") detail.classes.add("hidden");
+        if (mode === "aria") detail.attributes.set("aria-hidden", "true");
+        f.mount();
+        expect(f.scroller.scrollTop).toBe(f.scroller.scrollHeight);
+      },
+    );
+
+    it("keeps non-overflowing ordinary content untouched", () => {
+      const f = fixture();
+      f.messages.push(new ElementFixture());
+      f.scroller.scrollHeight = 200;
+      f.mount();
+      expect(f.scroller.scrollTop).toBe(0);
+      expect(f.region.classes.has("has-overflow")).toBe(false);
+    });
   });
 });

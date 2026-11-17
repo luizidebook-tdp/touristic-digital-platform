@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "MD-MAP-VISUAL-PILOT-20261116",
   "objective": "manual-place-detail-visual-pilot-with-central-map-canonical-media-accessible-order-stable-scroll-and-no-related-tours",
-  "baseSha": "3c7a5c97f5906c26b5c3bee37c0e8781accb04fb",
+  "baseSha": "1de021c213160e759d84bbe57ad0a881480ebf8d",
   "branch": "feat/map-visual-pilot-20261116-v2",
   "state": "IMPLEMENTING",
   "risk": "high",

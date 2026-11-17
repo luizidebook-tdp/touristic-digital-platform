@@ -173,7 +173,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "feat/map-visual-pilot-20261116-v2",
-      "baseSha": "3c7a5c97f5906c26b5c3bee37c0e8781accb04fb",
+      "baseSha": "1de021c213160e759d84bbe57ad0a881480ebf8d",
       "paths": [
         "apps/morro-digital-platform/public/tourist-shell-v2.css",
         "apps/morro-digital-platform/src/layouts/app-shell.ts",

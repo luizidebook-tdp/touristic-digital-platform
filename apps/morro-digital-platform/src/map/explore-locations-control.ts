@@ -1,4 +1,9 @@
-import type { PublicPlaceCommerceProjection } from "@touristic/business";
+import { createFeatureStyleGate } from "./feature-styles.js";
+import type {
+  PublicPlaceCommerceProjection,
+  PublicPlaceMediaProjection,
+  PublicPlaceMediaImage,
+} from "@touristic/business";
 import { publicPlaceCatalogText } from "./public-place-catalog-presentation.js";
 import { groupProjectedMarkers } from "./explore-marker-grouping.js";
 import {
@@ -6,7 +11,10 @@ import {
   normalizeAssistantVoiceLanguage,
   type AssistantLocale,
 } from "@touristic/assistant";
-import { requestAssistantOpen } from "../assistant/assistant-shell-ui.js";
+import {
+  ASSISTANT_CLOSE_REQUEST_EVENT,
+  requestAssistantOpen,
+} from "../assistant/assistant-shell-ui.js";
 import {
   getAssistantConversationOrchestrator,
   type ConversationTurn,
@@ -82,6 +90,111 @@ function canonicalPlaceRuntimeAvailable(): boolean {
 }
 
 type ExploreStage = "menu" | "filters" | "places" | "detail" | "tour";
+
+// Canonical media presentation is owned by the active place-detail controller.
+const missingPhotoCopy = Object.freeze({
+  pt: "Foto não disponível",
+  en: "Photo unavailable",
+  es: "Foto no disponible",
+  he: "התמונה אינה זמינה",
+} satisfies Record<AssistantLocale, string>);
+
+/** Only published media references, never inferred or third-party substitutes. */
+export function normalizePlaceDetailImageSource(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const source = value.trim();
+  if (
+    !source ||
+    source.includes("\\") ||
+    Array.from(source).some((character) => {
+      const code = character.charCodeAt(0);
+      return code <= 32 || code === 127;
+    })
+  )
+    return null;
+  if (source.startsWith("/") && !source.startsWith("//")) return source;
+  if (!/^https:\/\//iu.test(source)) return null;
+  try {
+    const url = new URL(source);
+    return url.protocol === "https:" && !url.username && !url.password
+      ? url.href
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface PlaceDetailMediaPresentation {
+  readonly src: string;
+  readonly alt: string;
+}
+
+export function resolvePlaceDetailMedia(
+  media: PublicPlaceMediaProjection | null | undefined,
+  placeId: string,
+  name: string,
+): PlaceDetailMediaPresentation | null {
+  if (!media || !placeId.trim()) return null;
+  // Older projections may omit their identity. When supplied it must match.
+  if (media.placeId !== undefined && media.placeId !== placeId) return null;
+  const images: readonly (PublicPlaceMediaImage | null | undefined)[] = [
+    media.coverImage,
+    ...(Array.isArray(media.gallery)
+      ? (media.gallery as readonly PublicPlaceMediaImage[])
+      : []),
+  ];
+  for (const image of images) {
+    const src = normalizePlaceDetailImageSource(image?.providerReference);
+    if (src) {
+      return Object.freeze({
+        src,
+        alt:
+          typeof image?.alt === "string" && image.alt.trim()
+            ? image.alt.trim()
+            : name,
+      });
+    }
+  }
+  return null;
+}
+
+/** Adds one media region to the existing detail, not another panel or modal. */
+export function createPlaceDetailMedia(
+  document: Document,
+  media: PublicPlaceMediaProjection | null | undefined,
+  placeId: string,
+  name: string,
+  locale: AssistantLocale,
+): HTMLElement {
+  const presentation = resolvePlaceDetailMedia(media, placeId, name);
+  const figure = document.createElement("figure");
+  figure.className = "md-place-detail-media";
+  figure.dataset.mediaState = presentation ? "ready" : "missing";
+  const fallback = document.createElement("span");
+  fallback.className = "md-place-detail-media-fallback";
+  fallback.textContent = missingPhotoCopy[locale];
+  fallback.hidden = Boolean(presentation);
+  if (presentation) {
+    const image = document.createElement("img");
+    image.className = "md-place-detail-image";
+    image.alt = presentation.alt;
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.addEventListener(
+      "error",
+      () => {
+        image.remove();
+        fallback.hidden = false;
+        figure.dataset.mediaState = "missing";
+      },
+      { once: true },
+    );
+    image.src = presentation.src;
+    figure.appendChild(image);
+  }
+  figure.appendChild(fallback);
+  return figure;
+}
 
 export interface ExploreSearchResult {
   readonly name: string;
@@ -549,6 +662,16 @@ export function installExploreLocationsControl({
   submenu?.setAttribute("aria-hidden", "true");
   submenuContainer?.replaceChildren();
 
+  const placeDetailStyles = createFeatureStyleGate(document);
+  const detailMinimizeButton = document.querySelector(
+    "#assistant-messages .minimize-button",
+  );
+  detailMinimizeButton?.addEventListener("click", placeDetailStyles.cancel);
+  document.addEventListener(
+    ASSISTANT_CLOSE_REQUEST_EVENT,
+    placeDetailStyles.cancel,
+  );
+
   let geospatialEngine: GeospatialEngine | undefined;
   let activeCategoryButton: HTMLButtonElement | undefined;
   let activeCategory: ExploreLocationsCategory | undefined;
@@ -561,6 +684,7 @@ export function installExploreLocationsControl({
         categoryLabel: string;
         description: string;
         commerce?: PublicPlaceCommerceProjection | null;
+        media?: PublicPlaceMediaProjection | null;
         locale: AssistantLocale;
       }>
     | undefined;
@@ -1261,6 +1385,10 @@ export function installExploreLocationsControl({
     categoryLabel: string,
     description: string,
     turn?: ConversationTurn,
+    visual?: Readonly<{
+      placeId: string;
+      media?: PublicPlaceMediaProjection | null;
+    }>,
   ): void => {
     const area = assistantMessagesArea(document);
     if (!area) return;
@@ -1326,10 +1454,27 @@ export function installExploreLocationsControl({
       }
       content.push(body);
     }
+    if (visual) {
+      message.dataset.placeDetailVisual = "true";
+      content.splice(
+        1,
+        0,
+        createPlaceDetailMedia(
+          document,
+          visual.media ?? null,
+          visual.placeId,
+          location.name,
+          currentLocale(),
+        ),
+      );
+    } else {
+      delete message.dataset.placeDetailVisual;
+    }
     message.replaceChildren(...content);
     message.classList.remove("hidden");
     message.setAttribute("aria-hidden", "false");
-    area.scrollTop = area.scrollHeight;
+    // The shell anchors a new rich detail once and preserves subsequent reading.
+    if (!visual) area.scrollTop = area.scrollHeight;
     requestAssistantOpen(document);
   };
 
@@ -1613,6 +1758,7 @@ export function installExploreLocationsControl({
   };
 
   const handlePlaceAction = (value: string): void => {
+    placeDetailStyles.cancel();
     if (value.startsWith("place-action:share:")) {
       const location = activePlaceLocation;
       if (
@@ -1644,35 +1790,56 @@ export function installExploreLocationsControl({
         const conversation = getAssistantConversationOrchestrator(document);
         // Repeating an explicit action still supersedes a pending answer,
         // even when the conversation deduplicates the unchanged details turn.
-        conversation.issueSequence();
-        const turn = conversation.transition({
-          cause: "place_details",
-          messageKey: "place_details",
-          intent: "place_info",
-          userAction: value,
-          source: "explore-place-details",
-          place: detail.location.name,
-          category: detail.location.category,
-          mapContext: {
-            mode: "detail",
-            activeCategory: detail.location.category,
-            selectedPlaceId: detail.placeId,
-          },
-          entities: { placeId: detail.placeId },
-          renderedText: description,
-          priority: "explicit",
-        });
-        renderPlaceDetailMessage(
-          detail.location,
-          detail.categoryLabel,
-          turn.renderedText,
-          turn,
-        );
-        document.dispatchEvent(
-          new CustomEvent("morro:assistant-place-details-presented", {
-            detail: { turnId: turn.id },
-          }),
-        );
+        const detailSequence = conversation.issueSequence();
+        const assistantWasHidden =
+          document
+            .getElementById("assistant-messages")
+            ?.getAttribute("aria-hidden") === "true";
+        const present = (): void => {
+          if (
+            !conversation.isCurrentSequence(detailSequence) ||
+            readActivePlaceDetail(value) !== detail ||
+            !activePlaceActionValues.includes(value) ||
+            (!assistantWasHidden &&
+              document
+                .getElementById("assistant-messages")
+                ?.getAttribute("aria-hidden") === "true")
+          )
+            return;
+          const turn = conversation.transition({
+            cause: "place_details",
+            messageKey: "place_details",
+            intent: "place_info",
+            userAction: value,
+            source: "explore-place-details",
+            place: detail.location.name,
+            category: detail.location.category,
+            mapContext: {
+              mode: "detail",
+              activeCategory: detail.location.category,
+              selectedPlaceId: detail.placeId,
+            },
+            entities: { placeId: detail.placeId },
+            renderedText: description,
+            priority: "explicit",
+          });
+          renderPlaceDetailMessage(
+            detail.location,
+            detail.categoryLabel,
+            turn.renderedText,
+            turn,
+            kind === "info"
+              ? { placeId: detail.placeId, media: detail.media ?? null }
+              : undefined,
+          );
+          document.dispatchEvent(
+            new CustomEvent("morro:assistant-place-details-presented", {
+              detail: { turnId: turn.id },
+            }),
+          );
+        };
+        if (kind === "info") placeDetailStyles.run(present);
+        else present();
       }
       return;
     }
@@ -2027,6 +2194,7 @@ export function installExploreLocationsControl({
             categoryLabel,
             description: detailDescription?.trim() ?? "",
             commerce: detail.commerce,
+            media: detail.media,
             locale,
           });
           const canonicalActions = detail.actions.secondaryActions.map(
@@ -3232,6 +3400,15 @@ export function installExploreLocationsControl({
       };
     },
     destroy() {
+      placeDetailStyles.cancel();
+      detailMinimizeButton?.removeEventListener(
+        "click",
+        placeDetailStyles.cancel,
+      );
+      document.removeEventListener(
+        ASSISTANT_CLOSE_REQUEST_EVENT,
+        placeDetailStyles.cancel,
+      );
       if (externalTourOwnsMap) clearTourPresentation(document);
       destroyed = true;
       const previous = geospatialEngine;

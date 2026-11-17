@@ -648,6 +648,12 @@ function synchronizeAssistantLayout(document: Document): void {
     return;
   }
 
+  // The presenter is reused, but its heading is replaced for each detail render.
+  // Image fallback, font readiness and resize must not restart the reading position.
+  let anchoredDetailHeading: HTMLElement | null = null;
+  let readingDetail = false;
+  let previousLatestMessage: HTMLElement | undefined;
+
   const update = (): void => {
     const textMessages = Array.from(
       messagesArea.querySelectorAll<HTMLElement>(
@@ -658,7 +664,7 @@ function synchronizeAssistantLayout(document: Document): void {
       ".carousel-container, .assistant-photo-carousel",
     );
     const richInteractiveContainers = messagesArea.querySelectorAll(
-      '.assistant-options:not([data-assistant-command-source="legacy-category-routing"]):not(.md-contextual-rail-source), #assistant-category-results:not(.md-contextual-rail-source), .assistant-photo-carousel, .assistant-photo-back-options',
+      '.assistant-options:not([data-assistant-command-source="legacy-category-routing"]):not(.md-contextual-rail-source), #assistant-category-results:not(.md-contextual-rail-source), .assistant-photo-carousel, .assistant-photo-back-options, .md-assistant-place-detail-message[data-place-detail-visual="true"]',
     );
     const totalTextLength = textMessages.reduce(
       (total, message) => total + (message.textContent?.length ?? 0),
@@ -696,11 +702,50 @@ function synchronizeAssistantLayout(document: Document): void {
       messageNodes[0]?.getAttribute("data-i18n") ===
         "assistant_welcome_message";
 
-    if (isInitialWelcome) {
-      messagesArea.scrollTop = 0;
-    } else if (hasOverflow) {
-      messagesArea.scrollTop = messagesArea.scrollHeight;
+    const latestMessage = messageNodes.at(-1);
+    const visualDetail = messageNodes
+      .slice()
+      .reverse()
+      .find(
+        (message) =>
+          message.dataset.placeDetailVisual === "true" &&
+          !message.hidden &&
+          !message.classList.contains("hidden") &&
+          message.getAttribute("aria-hidden") !== "true",
+      );
+    const detailHeading =
+      visualDetail?.querySelector<HTMLElement>(
+        ".md-assistant-place-detail-title",
+      ) ?? null;
+    const isNewDetailRender = detailHeading !== anchoredDetailHeading;
+    if (isNewDetailRender) {
+      readingDetail = Boolean(detailHeading);
+    } else if (latestMessage !== previousLatestMessage) {
+      // A subsequent conversation response owns scrolling again. A reused detail
+      // can still become current later, even when it is not last in DOM order.
+      readingDetail = false;
     }
+    previousLatestMessage = latestMessage;
+
+    if (detailHeading && readingDetail) {
+      if (isNewDetailRender) {
+        // Anchor the current heading, not the start of retained conversation history.
+        messagesArea.scrollTop = Math.max(
+          0,
+          messagesArea.scrollTop +
+            detailHeading.getBoundingClientRect().top -
+            messagesArea.getBoundingClientRect().top -
+            messagesArea.clientTop,
+        );
+      }
+    } else {
+      if (isInitialWelcome) {
+        messagesArea.scrollTop = 0;
+      } else if (hasOverflow) {
+        messagesArea.scrollTop = messagesArea.scrollHeight;
+      }
+    }
+    anchoredDetailHeading = detailHeading;
   };
 
   update();
