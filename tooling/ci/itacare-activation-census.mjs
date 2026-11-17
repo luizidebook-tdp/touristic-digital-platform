@@ -50,6 +50,47 @@ const IMPORT =
 const EXPRESSION =
   "getV1ExploreUiCopy(locale).categoryAria(category.label, category.count)";
 const OLD_ARIA = "\x60\x24{category.label} · \x24{category.count} locais\x60";
+const LEAFLET_CAMERA_EDITS = [
+  {
+    before: [
+      "              void installGrantedCurrentLocationMarker(map, provider.sdk);",
+      "            },",
+      "          }",
+      "        : {}),",
+      "",
+    ].join("\n"),
+    after: [
+      "              void installGrantedCurrentLocationMarker(map, provider.sdk);",
+      "            },",
+      "          }",
+      "        : {",
+      "            onMapCreated: (map: MapboxGlMapLike) => {",
+      "              clearBrowserNavigationRuntime();",
+      "              application.exploreLocations.setNativeMap(map);",
+      "              setV1MapboxCompatibilityAliases(map);",
+      "              activeNavigationRuntimeInstall = installBrowserNavigationRuntime({",
+      "                map,",
+      "                sdk: provider.sdk,",
+      "                document,",
+      "              });",
+      "            },",
+      "          }),",
+      "",
+    ].join("\n"),
+  },
+  {
+    before: [
+      "      onMapCreated: (map: MapboxGlMapLike) => {",
+      "        activeDiscoverPoiCleanup = installDiscoverPoiMarkers(",
+    ].join("\n"),
+    after: [
+      "      onMapCreated: (map: MapboxGlMapLike) => {",
+      "        application.exploreLocations.setNativeMap(map);",
+      "        setV1MapboxCompatibilityAliases(map);",
+      "        activeDiscoverPoiCleanup = installDiscoverPoiMarkers(",
+    ].join("\n"),
+  },
+];
 const SHA = /^[a-f0-9]{40}$/u;
 const MAX_BYTES = 1024 * 1024;
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -131,7 +172,7 @@ function source(file) {
 
 const occurrences = (text, value) => text.split(value).length - 1;
 
-// This recognizes one reversible source recipe, never arbitrary partial activation.
+// Only exact reversible source recipes qualify, never arbitrary partial activation.
 export function classifyNeutralMaintenance(snapshot) {
   requireThat(
     snapshot &&
@@ -169,25 +210,50 @@ export function classifyNeutralMaintenance(snapshot) {
       !after.includes("toCoreDestinationConfig"),
     "ITACARE_ACTIVATION_BINDING_PRESENT",
   );
-  requireThat(
-    occurrences(before, IMPORT) === 0 &&
-      occurrences(before, EXPRESSION) === 0 &&
-      occurrences(before, OLD_ARIA) === 1 &&
-      occurrences(after, IMPORT) === 1 &&
-      occurrences(after, EXPRESSION) === 1 &&
-      occurrences(after, OLD_ARIA) === 0,
-    "ITACARE_RECIPE_CARDINALITY_INVALID",
-  );
-  const reversed = Buffer.from(
-    after.replace(IMPORT, "").replace(EXPRESSION, OLD_ARIA),
-  );
+  let classification, reversed, limits;
+  if (LEAFLET_CAMERA_EDITS.some((edit) => after.includes(edit.after))) {
+    for (const edit of LEAFLET_CAMERA_EDITS) {
+      requireThat(
+        occurrences(before, edit.before) === 1 &&
+          occurrences(before, edit.after) === 0 &&
+          occurrences(after, edit.before) === 0 &&
+          occurrences(after, edit.after) === 1,
+        "ITACARE_LEAFLET_RECIPE_CARDINALITY_INVALID",
+      );
+    }
+    reversed = Buffer.from(
+      LEAFLET_CAMERA_EDITS.reduce(
+        (text, edit) => text.replace(edit.after, edit.before),
+        after,
+      ),
+    );
+    classification = "NEUTRAL_LEAFLET_CAMERA_BINDING_V1";
+    limits =
+      "Only the closed two-edit Leaflet camera binding recipe. Existing scoped Place, server, SQL and complete-activation gates remain authoritative.";
+  } else {
+    requireThat(
+      occurrences(before, IMPORT) === 0 &&
+        occurrences(before, EXPRESSION) === 0 &&
+        occurrences(before, OLD_ARIA) === 1 &&
+        occurrences(after, IMPORT) === 1 &&
+        occurrences(after, EXPRESSION) === 1 &&
+        occurrences(after, OLD_ARIA) === 0,
+      "ITACARE_RECIPE_CARDINALITY_INVALID",
+    );
+    reversed = Buffer.from(
+      after.replace(IMPORT, "").replace(EXPRESSION, OLD_ARIA),
+    );
+    classification = "NEUTRAL_DISCOVER_CATEGORY_ARIA_V1";
+    limits =
+      "Only the closed two-edit localization recipe. Existing scoped Place, server, SQL and complete-activation gates remain authoritative.";
+  }
   requireThat(
     reversed.equals(snapshot.baseFiles[ENTRY].bytes),
     "ITACARE_RECIPE_REVERSAL_MISMATCH",
   );
   return Object.freeze({
     schemaVersion: 1,
-    classification: "NEUTRAL_DISCOVER_CATEGORY_ARIA_V1",
+    classification,
     activated: false,
     baseSha: snapshot.baseSha,
     headSha: snapshot.headSha,
@@ -203,8 +269,7 @@ export function classifyNeutralMaintenance(snapshot) {
         },
       ]),
     ),
-    limits:
-      "Only the closed two-edit localization recipe. Existing scoped Place, server, SQL and complete-activation gates remain authoritative.",
+    limits,
   });
 }
 
