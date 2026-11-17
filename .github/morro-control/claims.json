@@ -190,7 +190,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "chore/acquire-explore-detail-proof-20261117",
-      "baseSha": "a1a6eb6cb57dd088e643a8e6ccf74f9f5cf0f548",
+      "baseSha": "d1a352b9773506cccd5eb83c0c2903e66d6d0e44",
       "paths": [
         ".morro/changesets/MD-EXPLORE-DETAIL-PROOF-20261117.json",
         ".github/workflows/assistant-input-menu-flow-v1-parity.yml",
