@@ -46,6 +46,45 @@ const baseline = [
   "",
 ].join("\n");
 const localized = baseline.replace("\n", "\n" + IMPORT).replace(OLD, CALL);
+const fallbackBefore = [
+  "              void installGrantedCurrentLocationMarker(map, provider.sdk);",
+  "            },",
+  "          }",
+  "        : {}),",
+  "",
+].join("\n");
+const fallbackAfter = [
+  "              void installGrantedCurrentLocationMarker(map, provider.sdk);",
+  "            },",
+  "          }",
+  "        : {",
+  "            onMapCreated: (map: MapboxGlMapLike) => {",
+  "              clearBrowserNavigationRuntime();",
+  "              application.exploreLocations.setNativeMap(map);",
+  "              setV1MapboxCompatibilityAliases(map);",
+  "              activeNavigationRuntimeInstall = installBrowserNavigationRuntime({",
+  "                map,",
+  "                sdk: provider.sdk,",
+  "                document,",
+  "              });",
+  "            },",
+  "          }),",
+  "",
+].join("\n");
+const recoveryBefore = [
+  "      onMapCreated: (map: MapboxGlMapLike) => {",
+  "        activeDiscoverPoiCleanup = installDiscoverPoiMarkers(",
+].join("\n");
+const recoveryAfter = recoveryBefore.replace(
+  "        activeDiscoverPoiCleanup",
+  "        application.exploreLocations.setNativeMap(map);\n" +
+    "        setV1MapboxCompatibilityAliases(map);\n" +
+    "        activeDiscoverPoiCleanup",
+);
+const leafletBefore = baseline + fallbackBefore + recoveryBefore + "\n";
+const leafletAfter = leafletBefore
+  .replace(fallbackBefore, fallbackAfter)
+  .replace(recoveryBefore, recoveryAfter);
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 function file(bytes, mode = "100644", type = "blob") {
@@ -85,6 +124,61 @@ function fixture() {
 }
 function put(snapshot, path, text, side = "headFiles", mode) {
   snapshot[side][path] = file(text, mode);
+}
+
+function leafletFixture() {
+  const snapshot = fixture();
+  put(snapshot, ENTRY, leafletBefore, "baseFiles");
+  put(snapshot, ENTRY, leafletAfter);
+  return snapshot;
+}
+
+test("the closed Leaflet recipe is neutral only when both exact camera bindings reverse to BASE", () => {
+  const receipt = classifyNeutralMaintenance(leafletFixture());
+  assert.equal(receipt.classification, "NEUTRAL_LEAFLET_CAMERA_BINDING_V1");
+  assert.equal(receipt.activated, false);
+  assert.deepEqual(receipt.originalChangedActivationPaths, [ENTRY]);
+  assert.equal(receipt.reversedEntrySha256, sha256(leafletBefore));
+});
+
+for (const [name, mutate] of [
+  ["unrelated source", (s) => s + "activateDestination();\n"],
+  ["extra import", (s) => 'import "./untrusted.js";\n' + s],
+  ["extra whitespace", (s) => s + "\n"],
+  [
+    "removed navigation cleanup",
+    (s) => s.replace("              clearBrowserNavigationRuntime();\n", ""),
+  ],
+  ["changed provider", (s) => s.replace("sdk: provider.sdk", "sdk: other.sdk")],
+  [
+    "changed real-provider context",
+    (s) =>
+      s.replace(
+        "void installGrantedCurrentLocationMarker",
+        "void otherCallback",
+      ),
+  ],
+  ["missing recovery binding", (s) => s.replace(recoveryAfter, recoveryBefore)],
+  ["duplicate callback", (s) => s + fallbackAfter],
+  ["destination binding", (s) => s + "toCoreDestinationConfig();\n"],
+]) {
+  test("Leaflet maintenance rejects " + name, () => {
+    const snapshot = leafletFixture();
+    put(snapshot, ENTRY, mutate(leafletAfter));
+    assert.throws(() => classifyNeutralMaintenance(snapshot));
+  });
+}
+
+for (const path of SNAPSHOT_PATHS.filter((path) => path !== ENTRY)) {
+  test(
+    "Leaflet maintenance rejects a concurrent activation/context delta: " +
+      path,
+    () => {
+      const snapshot = leafletFixture();
+      put(snapshot, path, "unrelated delta\n");
+      assert.throws(() => classifyNeutralMaintenance(snapshot));
+    },
+  );
 }
 
 test("the closed recipe preserves identities and reports one changed path truthfully", () => {
@@ -308,7 +402,10 @@ test("no-change and twelve-path activation do not enter the neutral recipe", () 
   );
 });
 
-function realFixture(t, { withValidator = true } = {}) {
+function realFixture(
+  t,
+  { withValidator = true, entryBefore = baseline, entryAfter = localized } = {},
+) {
   const dir = mkdtempSync(join(tmpdir(), "itacare-census-"));
   const repo = join(dir, "repo");
   mkdirSync(repo);
@@ -324,6 +421,7 @@ function realFixture(t, { withValidator = true } = {}) {
     mkdirSync(dirname(join(repo, path)), { recursive: true });
     writeFileSync(join(repo, path), entry.bytes);
   }
+  writeFileSync(join(repo, ENTRY), entryBefore);
   if (withValidator) {
     mkdirSync(dirname(join(repo, VALIDATOR)), { recursive: true });
     writeFileSync(join(repo, VALIDATOR), validatorSource);
@@ -343,7 +441,7 @@ function realFixture(t, { withValidator = true } = {}) {
   git("add", ".");
   git("commit", "--quiet", "-m", "base");
   const baseSha = git("rev-parse", "HEAD");
-  writeFileSync(join(repo, ENTRY), localized);
+  writeFileSync(join(repo, ENTRY), entryAfter);
   git("add", ".");
   git("commit", "--quiet", "-m", "localized");
   const headSha = git("rev-parse", "HEAD");
@@ -541,6 +639,46 @@ test("workflow recipe reports one path and binds create-only BASE source, blob a
   assert.equal(
     statSync(join(result.evidence, "base-validator.mjs")).mode & 0o777,
     0o400,
+  );
+});
+test("the workflow accepts the closed Leaflet recipe using only its BASE validator", (t) => {
+  const f = realFixture(t, {
+    entryBefore: leafletBefore,
+    entryAfter: leafletAfter,
+  });
+  writeFileSync(
+    join(f.repo, VALIDATOR),
+    'throw new Error("CANDIDATE_HELPER_EXECUTED");\n',
+  );
+  commitFixture(f, "untrusted candidate helper cannot replace BASE proof");
+  const result = workflowProof(f);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.output, /activated=false/);
+  const receipt = JSON.parse(
+    readFileSync(join(result.evidence, "neutral-maintenance.json")),
+  );
+  assert.equal(receipt.classification, "NEUTRAL_LEAFLET_CAMERA_BINDING_V1");
+  assert.equal(receipt.validator.baseSha, f.baseSha);
+  assert.equal(receipt.validator.sha256, sha256(validatorSource));
+  assert.doesNotMatch(
+    result.stdout + result.stderr,
+    /CANDIDATE_HELPER_EXECUTED/,
+  );
+});
+test("the BASE workflow still denies an extra source change alongside Leaflet camera maintenance", (t) => {
+  const f = realFixture(t, {
+    entryBefore: leafletBefore,
+    entryAfter: leafletAfter,
+  });
+  writeFileSync(join(f.repo, ENTRY), leafletAfter + "activateDestination();\n");
+  writeFileSync(join(f.repo, VALIDATOR), "process.exit(0);\n");
+  commitFixture(f, "candidate cannot declare arbitrary maintenance safe");
+  const result = workflowProof(f);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /REVERSAL_MISMATCH/);
+  assert.equal(
+    existsSync(join(result.evidence, "neutral-maintenance.json")),
+    false,
   );
 });
 test("a BASE without the validator denies the exception with no candidate fallback", (t) => {
