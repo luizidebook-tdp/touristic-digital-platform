@@ -14,6 +14,28 @@ import { runGithubAuthExec } from "./github-auth-exec.mjs";
 
 const fixtureToken = "fixture-private-" + "value-for-auth-tests";
 const repository = "example/workspace-proof";
+
+// Test-only compatibility: preserve proxy behavior and every nonmatching diagnostic.
+function expectedStderr(raw, expected, maxWarnings = 1, env = process.env) {
+  assert.equal(
+    raw.includes(fixtureToken),
+    false,
+    "raw stderr leaked credential",
+  );
+  const diagnostic =
+    /\(node:\d+\) \[UNDICI-EHPA\] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time\.\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)\n/gu;
+  const matches = [...raw.matchAll(diagnostic)];
+  if (matches.length) {
+    assert.equal(process.versions.node.split(".")[0], "22");
+    assert.equal(env.NODE_USE_ENV_PROXY, "1");
+    assert.ok(
+      matches.length <= maxWarnings,
+      "unexpected repeated proxy diagnostic",
+    );
+  }
+  assert.equal(raw.replace(diagnostic, ""), expected);
+}
+
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "auth-exec-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -135,7 +157,7 @@ test("environment credential avoids fallback; command nonzero and redaction are 
   assert.equal(r.credentialSource, "environment");
   assert.equal(r.exitCode, 17);
   assert.equal(r.stdout, "[REDACTED]");
-  assert.equal(r.stderr, "[REDACTED]");
+  expectedStderr(r.stderr, "[REDACTED]", 2, f.env);
   assert.equal(
     f.calls.some((c) => c.program === "gh" && c.args[0] === "auth"),
     false,
@@ -436,7 +458,7 @@ test("CLI reports safe failure for invalid auth-exec", () => {
     { encoding: "utf8" },
   );
   assert.equal(r.status, 1);
-  assert.equal(r.stderr.trim(), "AUTH_EXEC_RUNTIME_INVALID");
+  expectedStderr(r.stderr, "AUTH_EXEC_RUNTIME_INVALID\n");
   assert.equal(r.stdout, "");
 });
 
@@ -477,9 +499,28 @@ test("CLI preserves the executed command exit status and redacts its output", (t
     },
   );
   assert.equal(r.status, 17);
-  assert.equal(r.stderr, "");
+  expectedStderr(r.stderr, "", 1, f.env);
   const result = JSON.parse(r.stdout);
   assert.equal(result.exitCode, 17);
   assert.equal(result.stdout, "[REDACTED]");
   assert.equal(r.stdout.includes(fixtureToken), false);
+});
+
+test("proxy diagnostic compatibility fails closed on unexpected stderr or leaked credential", () => {
+  const warning =
+    "(node:123) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.\n(Use `node --trace-warnings ...` to show where the warning was created)\n";
+  const proxy = { NODE_USE_ENV_PROXY: "1" };
+  if (process.versions.node.startsWith("22."))
+    expectedStderr(warning + "[REDACTED]", "[REDACTED]", 1, proxy);
+  expectedStderr("[REDACTED]", "[REDACTED]", 0, {});
+  for (const bad of [
+    warning + fixtureToken,
+    warning + "unexpected",
+    warning.replace("experimental", "different"),
+    warning.repeat(3),
+  ]) {
+    assert.throws(() => expectedStderr(bad, "", 2, proxy));
+  }
+  assert.throws(() => expectedStderr(warning, "", 1, {}));
+  assert.throws(() => expectedStderr(warning, "", 0, proxy));
 });
