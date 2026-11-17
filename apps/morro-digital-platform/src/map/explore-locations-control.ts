@@ -2509,13 +2509,17 @@ export function installExploreLocationsControl({
 
   const selectLocation = async (
     location: ExploreMapLocation,
-    reason: "selection" | "locale" = "selection",
+    reason: "selection" | "locale" | "restore" = "selection",
   ): Promise<void> => {
     const refreshingLocale =
       reason === "locale" &&
       activeStage === "detail" &&
       activePlaceLocation === location;
-    if (!refreshingLocale) {
+    const restoringDetail =
+      reason === "restore" &&
+      activeStage === "detail" &&
+      activePlaceLocation === location;
+    if (!refreshingLocale && !restoringDetail) {
       if (visibleLocations.length === 0)
         installDataset([location], location.category, datasetCriteria);
       placeCamera.select(activeStage === "detail");
@@ -2599,7 +2603,7 @@ export function installExploreLocationsControl({
           })
         : Promise.resolve(null);
 
-    if (!refreshingLocale) {
+    if (!refreshingLocale && !restoringDetail) {
       await renderLocationsOnMap(
         visibleLocations.length ? visibleLocations : [location],
         visibleLocations.length ? datasetCategory : category,
@@ -3130,16 +3134,81 @@ export function installExploreLocationsControl({
     const previousStage = activeStage;
     const previousFlow = restoreCurrentFlow;
     const previousFocus = document.activeElement;
+    const previousPlace = activePlaceLocation;
+    const previousInteraction = interactionGeneration;
+    const previousLocale = currentLocale();
+    const detailMessage =
+      previousStage === "detail" && activePlace
+        ? document.getElementById(ASSISTANT_FLOW_MESSAGE_ID)
+        : null;
+    const detailScrollTop = detailMessage
+      ? assistantMessagesArea(document)?.scrollTop
+      : undefined;
+    const restoreDetailActions = refreshSavedPlaceActions;
+    // Keep the real nodes, including gallery position and event handlers.
+    detailMessage?.remove();
     activeStage = "places";
     activeMarkerMembers = members;
     const restore = (): void => {
       if (generation !== datasetGeneration || destroyed) return;
+      if (
+        detailMessage &&
+        (previousPlace !== activePlaceLocation ||
+          previousInteraction !== interactionGeneration)
+      )
+        return;
       closeMarkerList = undefined;
       refreshMarkerList = undefined;
       activeMarkerMembers = undefined;
       restoreCurrentFlow = previousFlow;
       activeStage = previousStage;
-      if (previousFlow) previousFlow();
+      if (detailMessage) {
+        const clusterMessage = document.getElementById(
+          ASSISTANT_FLOW_MESSAGE_ID,
+        );
+        if (clusterMessage) clusterMessage.replaceWith(detailMessage);
+        else assistantMessagesArea(document)?.appendChild(detailMessage);
+        restoreDetailActions();
+        const resolvedDetail = activePlaceDetail;
+        if (
+          resolvedDetail &&
+          resolvedDetail.location === previousPlace &&
+          !detailMessage.dataset.placeDetailVisual &&
+          !detailMessage.dataset.conversationTurnId
+        )
+          placeDetailStyles.run(() => {
+            if (
+              activeStage !== "detail" ||
+              activePlaceDetail !== resolvedDetail ||
+              activePlaceLocation !== previousPlace ||
+              document.getElementById(ASSISTANT_FLOW_MESSAGE_ID) !==
+                detailMessage
+            )
+              return;
+            renderPlaceDetailMessage(
+              resolvedDetail.location,
+              resolvedDetail.categoryLabel,
+              resolvedDetail.description,
+              undefined,
+              {
+                placeId: resolvedDetail.placeId,
+                media: resolvedDetail.media ?? null,
+              },
+            );
+          });
+        if (
+          previousPlace &&
+          "source" in previousPlace &&
+          previousPlace.source === "canonical" &&
+          activePlaceDetail?.location !== previousPlace
+        )
+          void selectLocation(previousPlace, "restore");
+        else if (previousPlace && previousLocale !== currentLocale())
+          void selectLocation(previousPlace, "locale");
+        const area = assistantMessagesArea(document);
+        if (area && detailScrollTop !== undefined)
+          area.scrollTop = detailScrollTop;
+      } else if (previousFlow) previousFlow();
       else {
         removeAssistantFlowResults(document);
         restoreCategoryRail();
