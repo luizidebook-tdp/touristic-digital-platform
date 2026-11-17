@@ -167,6 +167,15 @@ export function installExploreMapViewportV1({
     frameScheduled = false;
     if (destroyed || !mapElement) return;
     if (mapElement.dataset.exploreState !== "ready") return;
+    // Detail selection and camera restoration own their framing. Read the
+    // current owner here, after both animation frames, so an older scheduled
+    // dataset render cannot overwrite a return that happened in between.
+    const cameraOwner = mapElement.dataset.exploreCameraOwner;
+    if (
+      mapElement.dataset.exploreStage === "detail" ||
+      (cameraOwner !== undefined && cameraOwner !== "dataset")
+    )
+      return;
 
     // Navigation and immersive tours own their cameras independently.
     const mode = document.body?.dataset.mdMode;
@@ -262,6 +271,7 @@ export function installExploreMapViewportV1({
         "data-explore-state",
         "data-explore-category",
         "data-explore-stage",
+        "data-explore-camera-owner",
         "data-map-marker-count",
         "data-map-member-count",
         "data-explore-dataset-contract",
