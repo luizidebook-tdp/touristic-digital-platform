@@ -170,6 +170,21 @@
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-19T23:00:00.000Z"
+    },
+    "MD-LEAFLET-CAMERA-CENSUS-20261117": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "chore/acquire-leaflet-camera-census-20261117",
+      "baseSha": "6dbfcb8946080660deb1d7ef4c9e7746666d05ac",
+      "paths": [
+        "tooling/ci/itacare-activation-census.mjs",
+        "tooling/ci/itacare-activation-census.test.mjs",
+        ".morro/changesets/MD-LEAFLET-CAMERA-CENSUS-20261117.json"
+      ],
+      "domains": ["ci-release"],
+      "risk": "P1",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-19T23:00:00.000Z"
     }
   }
 }
