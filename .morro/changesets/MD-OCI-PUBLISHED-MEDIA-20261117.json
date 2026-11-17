@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "MD-OCI-PUBLISHED-MEDIA-20261117",
   "objective": "include-only-verified-published-legacy-media-in-immutable-runtime-image",
-  "baseSha": "4c56aa04bdeacb784aa3a12e04dc9416b6bf548a",
+  "baseSha": "1369aa8bcc189e324b86b4918c83c90eb41c0edc",
   "branch": "chore/acquire-published-media-image-20261117",
   "state": "LOCAL_PROVEN",
   "risk": "critical",
