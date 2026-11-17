@@ -1,0 +1,60 @@
+--- a/lib/parse.js
++++ b/lib/parse.js
+@@ -272,0 +273,44 @@
++// Single-branch star globs absorb repetition. Keep path separators, nested
++// constructs and quoted literal stars out of that rewrite; ambiguous forms
++// retain the parser's existing literal fallback for risky repeated extglobs.
++const analyzeStarBranch = branch => {
++  let escaped = false;
++  let bracket = false;
++  let quoted = false;
++  let star = false;
++  let simple = true;
++
++  for (let i = 0; i < branch.length; i++) {
++    const ch = branch[i];
++    if (ch === '/') simple = false;
++    if (escaped) {
++      if (ch === '\\') simple = false;
++      escaped = false;
++      continue;
++    }
++    if (ch === '\\') {
++      escaped = true;
++      continue;
++    }
++    if (ch === '"') {
++      quoted = !quoted;
++      continue;
++    }
++    if (quoted) continue;
++    if (bracket) {
++      if (ch === ']') bracket = false;
++      continue;
++    }
++    if (ch === '[') {
++      bracket = true;
++      continue;
++    }
++    if ('(){}|!+@'.includes(ch)) simple = false;
++    if (ch === '*' && branch[i + 1] !== '(') {
++      star = true;
++      if (branch[i + 1] === '*' || branch[i + 1] === '(') simple = false;
++    }
++  }
++  return { star, simple: simple && !escaped && !bracket && !quoted };
++};
++
+@@ -343,0 +388,7 @@
++  }
++
++  if (branches.length === 1) {
++    const branch = analyzeStarBranch(branches[0]);
++    if (branch.star) {
++      return branch.simple ? { risky: false, collapse: true } : { risky: true };
++    }
+@@ -567,0 +619,4 @@
++    if (analysis.collapse === true && (token.type === 'plus' || token.type === 'star')) {
++      token.close = token.type === 'plus' ? ')' : ')?';
++    }
++
