@@ -175,7 +175,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "chore/acquire-leaflet-camera-census-20261117",
-      "baseSha": "a171de2f886f39ed04ab76b97b24a80338a6f5df",
+      "baseSha": "6dbfcb8946080660deb1d7ef4c9e7746666d05ac",
       "paths": [
         "tooling/ci/itacare-activation-census.mjs",
         "tooling/ci/itacare-activation-census.test.mjs",
