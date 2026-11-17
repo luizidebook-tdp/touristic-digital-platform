@@ -142,7 +142,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "chore/acquire-published-media-image-20261117",
-      "baseSha": "3a0781a25381883bc3d941195decff1413e86d93",
+      "baseSha": "1369aa8bcc189e324b86b4918c83c90eb41c0edc",
       "paths": [
         ".morro/changesets/MD-OCI-PUBLISHED-MEDIA-20261117.json",
         "Dockerfile",
