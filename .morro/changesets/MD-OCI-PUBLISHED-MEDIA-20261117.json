@@ -4,7 +4,7 @@
   "objective": "include-only-verified-published-legacy-media-in-immutable-runtime-image",
   "baseSha": "4c56aa04bdeacb784aa3a12e04dc9416b6bf548a",
   "branch": "chore/acquire-published-media-image-20261117",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
