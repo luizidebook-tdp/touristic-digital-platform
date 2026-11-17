@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-MAP-GALLERY-20261117",
+  "objective": "preserve-map-selection-context-and-show-published-place-photo-gallery",
+  "baseSha": "0af89dbb2bb5a85de7bc1ac8bdb91e472245ce08",
+  "branch": "chore/acquire-map-gallery-20261117",
+  "state": "IMPLEMENTING",
+  "risk": "high",
+  "scope": "DESTINATION:MORRO",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-MAP-GALLERY-20261117.json",
+      "apps/morro-digital-platform/public/tourist-shell-v2.css",
+      "apps/morro-digital-platform/src/map/explore-locations-control.ts",
+      "apps/morro-digital-platform/src/map/explore-locations-control.test.ts",
+      "tooling/ci/entry-css-manifest.json"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 2,
+      "maxSeconds": 600
+    },
+    "commands": [
+      {
+        "id": "entry-css-runtime-contract",
+        "argv": ["node", "--test", "tooling/ci/build-entry-css.test.mjs"],
+        "timeoutSeconds": 300
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
