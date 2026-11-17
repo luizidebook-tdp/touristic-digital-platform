@@ -599,7 +599,7 @@ function actualPlaceDetailConsumer(
       const groupedMarkers=(locations,registry)=>{registry.clear();return locations.map((location,index)=>{const id=String(index);registry.set(id,[location]);return {...location,id};});};
       const frameLocationsOnMap=(_document,locations)=>{framedLocations=locations;framingCalls.push(locations);if(locations[0])camera={...camera,center:[locations[0].longitude,locations[0].latitude],zoom:16};},clearTourPresentation=()=>{},resetCategoryTriggerState=()=>{},showMainMenu=()=>{},clearExploreRuntimeStatus=()=>{};
       const discoveryClusterLabel=(count)=>String(count)+" places";
-      const renderFlow=(text)=>{let message=elements.get(ASSISTANT_FLOW_MESSAGE_ID);if(!message){message=new HTMLElement();message.id=ASSISTANT_FLOW_MESSAGE_ID;area.appendChild(message);}message.dataset.messageType="category-flow";message.children=[];message.textContent=text;return null;};
+      const renderFlow=(text)=>{let message=elements.get(ASSISTANT_FLOW_MESSAGE_ID);if(!message){message=new HTMLElement();message.id=ASSISTANT_FLOW_MESSAGE_ID;area.appendChild(message);}message.dataset.messageType="category-flow";message.children=[];message.textContent=text;elements.get(ASSISTANT_FLOW_RESULTS_ID)?.remove();const results=new HTMLElement();results.id=ASSISTANT_FLOW_RESULTS_ID;results.setAttribute("aria-label",text);area.appendChild(results);return null;};
       const setExploreRuntimeStatus=()=>{},emitStateChange=()=>{};
       const shareActivePlace=()=>{events.push({type:"share-observed",detail:{}});},tourTicketingUrl=()=>null,startImmersiveTour=()=>{},loadHybridGlobalMarkers=()=>{};
       const refreshCategoryPresentation=()=>{},restoreCategoryRail=()=>{},renderExploreRuntimeStatus=()=>{};
@@ -721,6 +721,9 @@ describe("selected canonical place detail action", () => {
       const camera = consumer.camera();
       const close = consumer.openMembers(members);
       expect(consumer.snapshot().stage).toBe("places");
+      expect(
+        consumer.document.getElementById("assistant-category-results"),
+      ).not.toBeNull();
       close();
       expect(consumer.snapshot()).toEqual(before);
       expect(consumer.camera()).toEqual(camera);
@@ -729,6 +732,9 @@ describe("selected canonical place detail action", () => {
       expect(restored).toBe(message);
       expect(Array.from(restored.childNodes)).toEqual(content);
       expect(area.scrollTop).toBe(37);
+      expect(
+        consumer.document.getElementById("assistant-category-results"),
+      ).toBeNull();
       expect(consumer.rails.at(-1)).toContainEqual(
         expect.objectContaining({ value: "__back_to_places__" }),
       );

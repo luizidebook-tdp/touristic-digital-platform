@@ -3163,6 +3163,7 @@ export function installExploreLocationsControl({
       restoreCurrentFlow = previousFlow;
       activeStage = previousStage;
       if (detailMessage) {
+        document.getElementById(ASSISTANT_FLOW_RESULTS_ID)?.remove();
         const clusterMessage = document.getElementById(
           ASSISTANT_FLOW_MESSAGE_ID,
         );
