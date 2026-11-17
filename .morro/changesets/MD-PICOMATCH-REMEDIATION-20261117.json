@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-PICOMATCH-REMEDIATION-20261117",
+  "objective": "remediate-picomatch-cve-2026-112366-with-transparent-vendored-fork-reproducible-source-provenance-and-unchanged-security-gates",
+  "baseSha": "5dcfa29c050458db80611f1a799a32a3b714b83f",
+  "branch": "chore/acquire-picomatch-remediation-20261117",
+  "state": "IMPLEMENTING",
+  "risk": "critical",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-PICOMATCH-REMEDIATION-20261117.json",
+      "package.json",
+      "pnpm-lock.yaml",
+      "tooling/quality/picomatch-security-remediation.test.mjs",
+      "tooling/quality/vendor/picomatch/"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "full-quality",
+    "domain-invariants",
+    "integration",
+    "exact-head-release-gates",
+    "format",
+    "secrets",
+    "dependency-audit",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "dependencies",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 2,
+      "maxSeconds": 600
+    },
+    "commands": [
+      {
+        "id": "picomatch-security-regression",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/quality/picomatch-security-remediation.test.mjs",
+          "tooling/quality/dependency-security-remediation.test.mjs"
+        ],
+        "timeoutSeconds": 300
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity",
+      "dependency-audit"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
