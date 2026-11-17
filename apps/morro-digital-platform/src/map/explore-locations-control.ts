@@ -134,29 +134,86 @@ export function resolvePlaceDetailMedia(
   placeId: string,
   name: string,
 ): PlaceDetailMediaPresentation | null {
-  if (!media || !placeId.trim()) return null;
+  return resolvePlaceDetailGallery(media, placeId, name)[0] ?? null;
+}
+
+/** Retains only references belonging to this place and avoids duplicate covers. */
+export function resolvePlaceDetailGallery(
+  media: PublicPlaceMediaProjection | null | undefined,
+  placeId: string,
+  name: string,
+): readonly PlaceDetailMediaPresentation[] {
+  if (!media || !placeId.trim()) return [];
   // Older projections may omit their identity. When supplied it must match.
-  if (media.placeId !== undefined && media.placeId !== placeId) return null;
+  if (media.placeId !== undefined && media.placeId !== placeId) return [];
   const images: readonly (PublicPlaceMediaImage | null | undefined)[] = [
     media.coverImage,
     ...(Array.isArray(media.gallery)
       ? (media.gallery as readonly PublicPlaceMediaImage[])
       : []),
   ];
+  const gallery: PlaceDetailMediaPresentation[] = [];
+  const seenIds = new Set<string>();
+  const seenSources = new Set<string>();
   for (const image of images) {
     const src = normalizePlaceDetailImageSource(image?.providerReference);
-    if (src) {
-      return Object.freeze({
-        src,
-        alt:
-          typeof image?.alt === "string" && image.alt.trim()
-            ? image.alt.trim()
-            : name,
-      });
+    const id = typeof image?.mediaId === "string" ? image.mediaId.trim() : "";
+    if (src && !seenSources.has(src) && (!id || !seenIds.has(id))) {
+      seenSources.add(src);
+      if (id) seenIds.add(id);
+      gallery.push(
+        Object.freeze({
+          src,
+          alt:
+            typeof image?.alt === "string" && image.alt.trim()
+              ? image.alt.trim()
+              : name,
+        }),
+      );
     }
   }
-  return null;
+  return Object.freeze(gallery);
 }
+
+const galleryCopy = Object.freeze({
+  pt: {
+    previous: "Foto anterior",
+    next: "Próxima foto",
+    of: "de",
+    gallery: "Fotos de",
+    failed: "Uma foto não pôde ser carregada.",
+  },
+  en: {
+    previous: "Previous photo",
+    next: "Next photo",
+    of: "of",
+    gallery: "Photos of",
+    failed: "A photo could not be loaded.",
+  },
+  es: {
+    previous: "Foto anterior",
+    next: "Foto siguiente",
+    of: "de",
+    gallery: "Fotos de",
+    failed: "No se pudo cargar una foto.",
+  },
+  he: {
+    previous: "התמונה הקודמת",
+    next: "התמונה הבאה",
+    of: "מתוך",
+    gallery: "תמונות של",
+    failed: "לא ניתן לטעון תמונה.",
+  },
+} satisfies Record<
+  AssistantLocale,
+  {
+    previous: string;
+    next: string;
+    of: string;
+    gallery: string;
+    failed: string;
+  }
+>);
 
 /** Adds one media region to the existing detail, not another panel or modal. */
 export function createPlaceDetailMedia(
@@ -166,31 +223,105 @@ export function createPlaceDetailMedia(
   name: string,
   locale: AssistantLocale,
 ): HTMLElement {
-  const presentation = resolvePlaceDetailMedia(media, placeId, name);
+  const gallery = resolvePlaceDetailGallery(media, placeId, name);
   const figure = document.createElement("figure");
   figure.className = "md-place-detail-media";
-  figure.dataset.mediaState = presentation ? "ready" : "missing";
+  figure.dataset.mediaState = gallery.length ? "ready" : "missing";
   const fallback = document.createElement("span");
   fallback.className = "md-place-detail-media-fallback";
+  fallback.setAttribute("role", "status");
   fallback.textContent = missingPhotoCopy[locale];
-  fallback.hidden = Boolean(presentation);
-  if (presentation) {
-    const image = document.createElement("img");
-    image.className = "md-place-detail-image";
-    image.alt = presentation.alt;
-    image.loading = "lazy";
-    image.decoding = "async";
-    image.addEventListener(
-      "error",
-      () => {
-        image.remove();
-        fallback.hidden = false;
-        figure.dataset.mediaState = "missing";
-      },
-      { once: true },
-    );
-    image.src = presentation.src;
-    figure.appendChild(image);
+  fallback.hidden = gallery.length > 0;
+  if (gallery.length) {
+    let image: HTMLImageElement | undefined;
+    let index = 0;
+    const failed = new Set<number>();
+    let previous: HTMLButtonElement | undefined;
+    let next: HTMLButtonElement | undefined;
+    let counter: HTMLElement | undefined;
+    let status: HTMLElement | undefined;
+    const display = (): void => {
+      const item = gallery[index]!;
+      const requestedIndex = index;
+      const requestedImage = document.createElement("img");
+      requestedImage.className = "md-place-detail-image";
+      requestedImage.loading = "lazy";
+      requestedImage.decoding = "async";
+      requestedImage.alt = item.alt;
+      requestedImage.addEventListener("error", () => {
+        // An old request can finish after the visitor has changed slides.
+        if (image !== requestedImage || failed.has(requestedIndex)) return;
+        const restoreFocus =
+          document.activeElement === previous ||
+          document.activeElement === next;
+        failed.add(requestedIndex);
+        if (status) status.textContent = galleryCopy[locale].failed;
+        if (failed.size === gallery.length) {
+          requestedImage.remove();
+          image = undefined;
+          if (previous) previous.hidden = true;
+          if (next) next.hidden = true;
+          if (counter) counter.hidden = true;
+          fallback.hidden = false;
+          figure.dataset.mediaState = "missing";
+        } else move(1);
+        if (restoreFocus && gallery.length - failed.size < 2)
+          figure.focus({ preventScroll: true });
+      });
+      image?.remove();
+      image = requestedImage;
+      figure.prepend(requestedImage);
+      requestedImage.src = item.src;
+      const remaining = gallery.length - failed.size;
+      if (previous) previous.hidden = remaining < 2;
+      if (next) next.hidden = remaining < 2;
+      if (counter) {
+        counter.hidden = remaining < 2;
+        const visibleIndex = gallery
+          .slice(0, index + 1)
+          .filter((_, itemIndex) => !failed.has(itemIndex)).length;
+        counter.textContent = `${visibleIndex} ${galleryCopy[locale].of} ${remaining}`;
+      }
+    };
+    const move = (direction: number): void => {
+      for (let step = 0; step < gallery.length; step += 1) {
+        index = (index + direction + gallery.length) % gallery.length;
+        if (!failed.has(index)) {
+          display();
+          return;
+        }
+      }
+    };
+    if (gallery.length > 1) {
+      figure.tabIndex = -1;
+      figure.setAttribute(
+        "aria-label",
+        `${galleryCopy[locale].gallery} ${name}`,
+      );
+      previous = document.createElement("button");
+      previous.type = "button";
+      previous.className = "md-place-detail-gallery-previous";
+      previous.setAttribute("aria-label", galleryCopy[locale].previous);
+      previous.textContent = locale === "he" ? "›" : "‹";
+      previous.addEventListener("click", () => move(-1));
+      next = document.createElement("button");
+      next.type = "button";
+      next.className = "md-place-detail-gallery-next";
+      next.setAttribute("aria-label", galleryCopy[locale].next);
+      next.textContent = locale === "he" ? "‹" : "›";
+      next.addEventListener("click", () => move(1));
+      counter = document.createElement("span");
+      counter.className = "md-place-detail-gallery-counter";
+      counter.setAttribute("aria-live", "polite");
+      status = document.createElement("span");
+      status.className = "md-place-detail-gallery-status";
+      status.setAttribute("role", "status");
+      figure.appendChild(previous);
+      figure.appendChild(next);
+      figure.appendChild(counter);
+      figure.appendChild(status);
+    }
+    display();
   }
   figure.appendChild(fallback);
   return figure;
@@ -1207,8 +1338,28 @@ export function installExploreLocationsControl({
       }
     };
 
+    // A direct place selection can come from outside the active filter. Keep
+    // the original dataset untouched while showing the selected place as an
+    // additional marker; identity uses canonical IDs, never a name match.
+    const selected = activeStage === "detail" ? activePlaceLocation : undefined;
+    const selectedInDataset =
+      selected &&
+      locations.some(
+        (member) =>
+          member === selected ||
+          ("source" in member &&
+            member.source === "canonical" &&
+            "source" in selected &&
+            selected.source === "canonical" &&
+            "placeId" in member &&
+            "placeId" in selected &&
+            !!member.placeId &&
+            member.placeId === selected.placeId),
+      );
+    const renderedLocations =
+      selected && !selectedInDataset ? [...locations, selected] : locations;
     const renderedMarkers = groupedMarkers(
-      locations,
+      renderedLocations,
       markerRegistry,
       `dataset:${datasetGeneration}`,
       openSelectedPopup,
@@ -1257,15 +1408,43 @@ export function installExploreLocationsControl({
         if (target && !same) target.setAttribute("tabindex", "-1");
         target?.focus({ preventScroll: true });
       }
-      if (openSelectedPopup && locations.length === 1) {
-        const selectedMarker = document.querySelector<HTMLElement>(
-          '.morro-explore-marker[data-morro-explore-marker="true"]:not([data-discover-initial-poi="true"])',
+      if (activeStage === "detail" && activePlaceLocation) {
+        const selected = activePlaceLocation;
+        const selectedIds = new Set(
+          [...markerRegistry.entries()]
+            .filter(([, members]) =>
+              members.some(
+                (member) =>
+                  member === selected ||
+                  ("placeId" in member &&
+                    "placeId" in selected &&
+                    !!member.placeId &&
+                    member.placeId === selected.placeId),
+              ),
+            )
+            .map(([id]) => id),
         );
-        selectedMarker?.setAttribute("data-selected", "true");
-        selectedMarker?.setAttribute("aria-current", "location");
+        for (const element of Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '.morro-explore-marker[data-morro-explore-marker="true"]',
+          ),
+        )) {
+          if (
+            element.dataset.markerId &&
+            selectedIds.has(element.dataset.markerId)
+          ) {
+            element.setAttribute("data-selected", "true");
+            element.setAttribute("aria-current", "location");
+          } else {
+            element.removeAttribute("data-selected");
+            element.removeAttribute("aria-current");
+          }
+        }
       }
       if (!cameraOnly)
         frameLocationsOnMap(document, locations, geospatialEngine);
+      else if (selected && !selectedInDataset)
+        frameLocationsOnMap(document, [selected], geospatialEngine);
       setSheetStatus(locations.length === 0 ? "empty" : "ready");
       if (!cameraOnly) emitStateChange();
     } catch (error) {
@@ -1407,6 +1586,16 @@ export function installExploreLocationsControl({
     message.dataset.messageType = "place-detail";
     message.dataset.category = location.category;
     message.dataset.place = location.name;
+    if (
+      "source" in location &&
+      location.source === "canonical" &&
+      "placeId" in location &&
+      location.placeId
+    ) {
+      message.dataset.placeId = location.placeId;
+    } else {
+      delete message.dataset.placeId;
+    }
     delete message.dataset.contextualState;
     delete message.dataset.contextualCta;
     delete message.dataset.contextualVoiceCopy;
@@ -2140,6 +2329,9 @@ export function installExploreLocationsControl({
         description,
       );
     }
+    const selectionMessage = !refreshingLocale
+      ? document.getElementById(ASSISTANT_FLOW_MESSAGE_ID)
+      : null;
     const firstPlaceAction = renderPlaceActionsRail(
       safeFallbackActions,
       null,
@@ -2160,10 +2352,10 @@ export function installExploreLocationsControl({
 
     if (!refreshingLocale) {
       await renderLocationsOnMap(
-        [location],
-        category,
-        true,
+        visibleLocations.length ? visibleLocations : [location],
+        visibleLocations.length ? datasetCategory : category,
         false,
+        visibleLocations.length > 0,
         datasetCriteria,
       );
     }
@@ -2229,6 +2421,31 @@ export function installExploreLocationsControl({
             detail.profile.name,
             locale,
           );
+          if (!refreshingLocale && selectionMessage) {
+            const resolvedDetail = activePlaceDetail;
+            placeDetailStyles.run(() => {
+              if (
+                generation !== interactionGeneration ||
+                activeStage !== "detail" ||
+                activePlaceDetail !== resolvedDetail ||
+                document.getElementById(ASSISTANT_FLOW_MESSAGE_ID) !==
+                  selectionMessage ||
+                selectionMessage.dataset.placeId !== canonicalPlaceId ||
+                selectionMessage.dataset.conversationTurnId
+              )
+                return;
+              renderPlaceDetailMessage(
+                resolvedDetail.location,
+                resolvedDetail.categoryLabel,
+                resolvedDetail.description,
+                undefined,
+                {
+                  placeId: resolvedDetail.placeId,
+                  media: resolvedDetail.media ?? null,
+                },
+              );
+            });
+          }
           if (
             refreshSequence !== undefined &&
             conversation.isCurrentSequence(refreshSequence)

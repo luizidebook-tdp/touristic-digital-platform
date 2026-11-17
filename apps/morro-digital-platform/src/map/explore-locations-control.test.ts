@@ -35,6 +35,7 @@ import {
   createPlaceDetailMedia,
   normalizePlaceDetailImageSource,
   resolvePlaceDetailMedia,
+  resolvePlaceDetailGallery,
   appliedMapFilterSummary,
   createExploreLocationDetailsCommand,
   type ExternalTourMapPreparation,
@@ -431,6 +432,11 @@ interface PlaceDetailConsumer {
   readState(): { placeId?: string | null; stage: string };
   setFavorites(value: unknown[]): void;
   refreshSaved(): void;
+  setLocations(locations: ExploreSearchResult[]): void;
+  getLocations(): ExploreSearchResult[];
+  getRenderedLocations(): ExploreSearchResult[];
+  getFramedLocations(): ExploreSearchResult[];
+  getSelectedMarkerIds(): string[];
   rails: Array<Array<{ label: string; value: string }>>;
   messages: Array<{ name: string; description: string; lineBreaks: number }>;
   events: Array<{ type: string; detail: Record<string, unknown> }>;
@@ -516,6 +522,7 @@ function actualPlaceDetailConsumer(
         setAttribute(name,value){this[name]=value;if(name.startsWith("data-"))this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;}
         removeAttribute(name){delete this[name];if(name.startsWith("data-"))delete this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())];}
         appendChild(node){this.children.push(node);if(node.id)elements.set(node.id,node);}
+        prepend(node){this.children.unshift(node);}
         replaceChildren(...nodes){
           this.children=nodes;
           if(this.className==="md-assistant-place-detail-description")this.textContent=nodes.map(node=>node.textContent).join("");
@@ -534,9 +541,10 @@ function actualPlaceDetailConsumer(
       const area=new HTMLElement();
       const map=new HTMLElement();map.dataset.exploreState="ready";elements.set("map",map);
       let storedFavorites=[];
+      let mapMarkerElements=[];
       const document={documentElement:{lang:locale},activeElement:null,
         defaultView:{localStorage:{getItem:()=>JSON.stringify({favoritePlaces:storedFavorites})},fetch() { throw Error("Unexpected direct network access"); },navigator:{geolocation:{getCurrentPosition(resolve){positionRequests+=1;if(holdPosition)resolvePosition=resolve;else resolve({coords:{latitude:-13.38,longitude:-38.91}});}}}},
-        querySelector:()=>null,querySelectorAll:()=>[],
+        querySelector:()=>null,querySelectorAll:selector=>selector.includes("morro-explore-marker")?mapMarkerElements:[],
         getElementById:id=>elements.get(id)??null,
         createElement:(tag)=>Object.assign(new HTMLElement(),{tagName:tag}),
         addEventListener:(type,listener)=>{const current=listeners.get(type)??new Set();current.add(listener);listeners.set(type,current);},
@@ -556,11 +564,12 @@ function actualPlaceDetailConsumer(
       let activeCategoryButton,activeSearchQuery="",restoreCurrentFlow,closeMarkerList,refreshMarkerList,returnToMarkerList;
       let placeReturnLocations=[],placeReturnCriteria=[],placeReturnMessage="",placeReturnIsSearch=false;
       let markerQueue=Promise.resolve(),markerProviderReady=Promise.resolve();
-      const geospatialEngine={initialized:true,replaceMarkers:()=>{mapCalls+=1;return markerProviderReady;}};
+      let renderedLocations=[],framedLocations=[];
+      const geospatialEngine={initialized:true,replaceMarkers:(markers)=>{renderedLocations=markers;mapMarkerElements=markers.map(marker=>{const el=new HTMLElement();el.dataset.markerId=marker.id;return el;});mapCalls+=1;return markerProviderReady;}};
       const markerRegistry=new Map();
       const clearDatasetGeometry=()=>{},publishDatasetGeometry=()=>{},syncLocationCounts=()=>{};
-      const groupedMarkers=locations=>locations.map((location,index)=>({id:String(index),...location}));
-      const frameLocationsOnMap=()=>{},clearTourPresentation=()=>{},resetCategoryTriggerState=()=>{},showMainMenu=()=>{},clearExploreRuntimeStatus=()=>{};
+      const groupedMarkers=(locations,registry)=>{registry.clear();return locations.map((location,index)=>{const id=String(index);registry.set(id,[location]);return {...location,id};});};
+      const frameLocationsOnMap=(_document,locations)=>{framedLocations=locations;},clearTourPresentation=()=>{},resetCategoryTriggerState=()=>{},showMainMenu=()=>{},clearExploreRuntimeStatus=()=>{};
       const renderFlow=(text)=>{let message=elements.get(ASSISTANT_FLOW_MESSAGE_ID);if(!message){message=new HTMLElement();message.id=ASSISTANT_FLOW_MESSAGE_ID;elements.set(message.id,message);}message.textContent=text;return null;};
       const setExploreRuntimeStatus=()=>{},emitStateChange=()=>{};
       const shareActivePlace=()=>{events.push({type:"share-observed",detail:{}});},tourTicketingUrl=()=>null,startImmersiveTour=()=>{},returnFromPlaceDetail=()=>{};
@@ -569,6 +578,7 @@ function actualPlaceDetailConsumer(
       ${functions.join("\n")}
       ${declarations.join("\n")}
       return {document,execute,select:selectLocation,click:handlePlaceAction,readState:stateSnapshot,setFavorites:(value)=>{storedFavorites=value;},refreshSaved:()=>refreshSavedPlaceActions(),rails,messages,events,
+        setLocations:locations=>{visibleLocations=locations;datasetCategory="search";},getLocations:()=>visibleLocations,getRenderedLocations:()=>renderedLocations,getFramedLocations:()=>framedLocations,getSelectedMarkerIds:()=>mapMarkerElements.filter(el=>el.dataset.selected==="true").map(el=>el.dataset.markerId),
         listenerCount:type=>listeners.get(type)?.size??0,
         holdMarkers:()=>{let release;markerProviderReady=new Promise(resolve=>{release=resolve;});return ()=>{markerProviderReady=Promise.resolve();release();};},
         holdPosition:()=>{holdPosition=true;return ()=>{holdPosition=false;resolvePosition?.({coords:{latitude:-13.38,longitude:-38.91}});};},
@@ -1115,6 +1125,38 @@ function actualConversationRuntime(
 }
 
 describe("explicit details across actual runtime async boundaries", () => {
+  it("retains the visible search dataset when selecting one place", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const first = canonicalLocation("place-a");
+    const second = canonicalLocation("place-b");
+    consumer.setLocations([first, second]);
+    await consumer.select(first);
+    expect(consumer.getLocations()).toEqual([first, second]);
+    expect(consumer.readState().placeId).toBe("place-a");
+    expect(consumer.getRenderedLocations()).toHaveLength(2);
+    expect(consumer.getSelectedMarkerIds()).toEqual(["0"]);
+    expect(consumer.getFramedLocations()).toEqual([]);
+  });
+
+  it("temporarily shows an out-of-filter selection without replacing search results or conflating same names", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const first = canonicalLocation("place-a");
+    const second = canonicalLocation("place-b");
+    const outside = canonicalLocation("place-c");
+    consumer.setLocations([first, second]);
+    await consumer.select(outside);
+    expect(consumer.getLocations()).toEqual([first, second]);
+    expect(consumer.getRenderedLocations().map((item) => item.placeId)).toEqual(
+      ["place-a", "place-b", "place-c"],
+    );
+    expect(consumer.readState().placeId).toBe("place-c");
+    expect(consumer.getSelectedMarkerIds()).toEqual(["2"]);
+    expect(consumer.getFramedLocations()).toEqual([outside]);
+  });
   it.each([
     ["mostrar só praias", undefined],
     ["mostrar todos os locais", undefined],
@@ -1491,7 +1533,7 @@ describe("confirmed details locale refresh", () => {
     await consumer.select(canonicalLocation("place-b"));
     englishA.resolve(canonicalDetail("place-a", "Obsolete A details"));
     await settleDetailRefresh();
-    expect(consumer.messages.at(-1)?.description).toBe("");
+    expect(consumer.messages.at(-1)?.description).toBe("Details for place-b");
     expect(consumer.presenter().conversationTurnId).toBeUndefined();
     consumer.click("place-action:info:place-a");
     expect(consumer.conversation.recentTurns()).toHaveLength(1);
@@ -1511,7 +1553,7 @@ describe("confirmed details locale refresh", () => {
     await consumer.select(canonicalLocation("place-a"));
     consumer.changeLocale("en");
     await settleDetailRefresh();
-    expect(consumer.messages.at(-1)?.description).toBe("");
+    expect(consumer.messages.at(-1)?.description).toBe("Full place details");
     expect(consumer.presenter().conversationTurnId).toBeUndefined();
     expect(consumer.conversation.recentTurns()).toHaveLength(1);
   });
@@ -1965,10 +2007,10 @@ describe("manual visual pilot in the active detail flow", () => {
     },
   });
 
-  it("uses the confirmed place media on explicit details without changing the map", async () => {
+  it("shows the selected place media and retains it on explicit details without changing the map", async () => {
     const consumer = actualPlaceDetailConsumer("pt", photoDetail);
     await consumer.select(canonicalLocation("place-a"));
-    expect(consumer.media()).toBeUndefined();
+    expect(consumer.media()?.src).toBe("/images/place-a.jpg");
     const before = consumer.snapshot();
     consumer.click("place-action:info:place-a");
     expect(consumer.media()).toEqual({
@@ -1984,8 +2026,8 @@ describe("manual visual pilot in the active detail flow", () => {
     ]);
     expect(consumer.snapshot()).toEqual(before);
     await consumer.select(canonicalLocation("place-b"));
-    expect(consumer.media()).toBeUndefined();
-    expect(consumer.presenter().placeDetailVisual).toBeUndefined();
+    expect(consumer.media()?.src).toBe("/images/place-b.jpg");
+    expect(consumer.presenter().placeDetailVisual).toBe("true");
     consumer.click("place-action:info:place-b");
     expect(consumer.media()?.src).toBe("/images/place-b.jpg");
   });
@@ -2050,7 +2092,9 @@ describe("manual visual pilot in the active detail flow", () => {
       if (change === "minimize") consumer.setAssistantHidden(true);
       ready();
       await styles;
-      expect(consumer.media()).toBeUndefined();
+      if (change === "selection")
+        expect(consumer.media()?.src).toBe("/images/place-b.jpg");
+      else expect(consumer.media()).toBeUndefined();
     },
   );
 
@@ -2144,6 +2188,8 @@ describe("canonical detail media presentation", () => {
     loading = "";
     decoding = "";
     dataset: Record<string, string> = {};
+    attributes: Record<string, string> = {};
+    focused = false;
     children: ElementFixture[] = [];
     parent: ElementFixture | undefined;
     listeners = new Map<string, () => void>();
@@ -2152,8 +2198,18 @@ describe("canonical detail media presentation", () => {
       child.parent = this;
       this.children.push(child);
     }
+    prepend(child: ElementFixture) {
+      child.parent = this;
+      this.children.unshift(child);
+    }
     addEventListener(name: string, callback: () => void) {
       this.listeners.set(name, callback);
+    }
+    setAttribute(name: string, value: string) {
+      this.attributes[name] = value;
+    }
+    focus() {
+      this.focused = true;
     }
     remove() {
       if (this.parent)
@@ -2213,6 +2269,184 @@ describe("canonical detail media presentation", () => {
           "Toca",
         ),
       ).toEqual({ src: "/images/toca.jpg", alt: "Toca" });
+    });
+
+    it("deduplicates published cover and gallery without mixing place identities", () => {
+      const input = media();
+      const first = input.coverImage!;
+      const second = {
+        ...first,
+        mediaId: "second",
+        providerReference: "/images/toca2.jpg",
+      };
+      const duplicateUrl = { ...second, mediaId: "third" };
+      expect(
+        resolvePlaceDetailGallery(
+          { ...input, gallery: [first, second, duplicateUrl] },
+          "place-toca",
+          "Toca",
+        ),
+      ).toEqual([
+        { src: "/images/toca.jpg", alt: "Toca do Morcego" },
+        { src: "/images/toca2.jpg", alt: "Toca do Morcego" },
+      ]);
+      expect(
+        resolvePlaceDetailGallery(
+          { ...input, gallery: [first, second] },
+          "other-place",
+          "Toca",
+        ),
+      ).toEqual([]);
+    });
+
+    it("ignores an obsolete image failure after switching photos", () => {
+      const fixture = dom();
+      const input = media();
+      const figure = createPlaceDetailMedia(
+        fixture.document,
+        {
+          ...input,
+          gallery: [
+            {
+              ...input.coverImage!,
+              mediaId: "next",
+              providerReference: "/images/next.jpg",
+            },
+          ],
+        },
+        "place-toca",
+        "Toca",
+        "pt",
+      ) as unknown as ElementFixture;
+      const oldImage = figure.children.find((node) => node.tagName === "img")!;
+      const next = figure.children.find(
+        (node) => node.className === "md-place-detail-gallery-next",
+      )!;
+      next.listeners.get("click")!();
+      oldImage.listeners.get("error")!();
+      expect(figure.children.find((node) => node.tagName === "img")?.src).toBe(
+        "/images/next.jpg",
+      );
+      expect(
+        figure.children.find(
+          (node) => node.className === "md-place-detail-gallery-counter",
+        )?.textContent,
+      ).toBe("2 de 2");
+      expect(figure.dataset.mediaState).toBe("ready");
+    });
+
+    it("points previous and next controls in the Hebrew reading direction", () => {
+      const fixture = dom();
+      const input = media();
+      const figure = createPlaceDetailMedia(
+        fixture.document,
+        {
+          ...input,
+          gallery: [
+            {
+              ...input.coverImage!,
+              mediaId: "next",
+              providerReference: "/images/next.jpg",
+            },
+          ],
+        },
+        "place-toca",
+        "Toca",
+        "he",
+      ) as unknown as ElementFixture;
+      expect(
+        figure.children.find(
+          (node) => node.className === "md-place-detail-gallery-previous",
+        )?.textContent,
+      ).toBe("›");
+      expect(
+        figure.children.find(
+          (node) => node.className === "md-place-detail-gallery-next",
+        )?.textContent,
+      ).toBe("‹");
+    });
+
+    it("navigates multiple photos and falls back only when all have failed", () => {
+      const fixture = dom();
+      const input = media();
+      const second = {
+        ...input.coverImage!,
+        mediaId: "second",
+        providerReference: "/images/toca2.jpg",
+      };
+      fixture.parent.appendChild(
+        createPlaceDetailMedia(
+          fixture.document,
+          { ...input, gallery: [input.coverImage!, second] },
+          "place-toca",
+          "Toca",
+          "pt",
+        ) as unknown as ElementFixture,
+      );
+      const figure = fixture.parent.children[0]!;
+      const [, previous, next, counter, status, fallback] = figure.children as [
+        ElementFixture,
+        ElementFixture,
+        ElementFixture,
+        ElementFixture,
+        ElementFixture,
+        ElementFixture,
+      ];
+      expect(next.attributes["aria-label"]).toBe("Próxima foto");
+      expect(previous.attributes["aria-label"]).toBe("Foto anterior");
+      expect(counter.textContent).toBe("1 de 2");
+      next.listeners.get("click")!();
+      const secondImage = figure.children.find(
+        (node) => node.tagName === "img",
+      )!;
+      expect(secondImage.src).toBe("/images/toca2.jpg");
+      expect(counter.textContent).toBe("2 de 2");
+      Object.defineProperty(fixture.document, "activeElement", {
+        value: next,
+        configurable: true,
+      });
+      secondImage.listeners.get("error")!();
+      const returnedImage = figure.children.find(
+        (node) => node.tagName === "img",
+      )!;
+      expect(returnedImage.src).toBe("/images/toca.jpg");
+      expect(fallback.hidden).toBe(true);
+      expect(figure.focused).toBe(true);
+      expect(status.attributes.role).toBe("status");
+      expect(status.textContent).toBe("Uma foto não pôde ser carregada.");
+      returnedImage.listeners.get("error")!();
+      expect(figure.dataset.mediaState).toBe("missing");
+      expect(fallback.hidden).toBe(false);
+      expect(next.hidden).toBe(true);
+    });
+
+    it("counts only available photos after an image fails", () => {
+      const fixture = dom();
+      const input = media();
+      const second = {
+        ...input.coverImage!,
+        mediaId: "second",
+        providerReference: "/images/second.jpg",
+      };
+      const third = {
+        ...input.coverImage!,
+        mediaId: "third",
+        providerReference: "/images/third.jpg",
+      };
+      fixture.parent.appendChild(
+        createPlaceDetailMedia(
+          fixture.document,
+          { ...input, gallery: [second, third] },
+          "place-toca",
+          "Toca",
+          "pt",
+        ) as unknown as ElementFixture,
+      );
+      const [image, , next, counter] = fixture.parent.children[0]!.children;
+      image!.listeners.get("error")!();
+      expect(counter!.textContent).toBe("1 de 2");
+      next!.listeners.get("click")!();
+      expect(counter!.textContent).toBe("2 de 2");
     });
 
     it.each([
