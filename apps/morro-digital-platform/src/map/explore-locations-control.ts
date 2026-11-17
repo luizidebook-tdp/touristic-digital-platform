@@ -527,6 +527,49 @@ function currentMap(): MapboxGlMapLike | undefined {
     .mapboxPrimaryInstance;
 }
 
+/** Dataset membership alone does not establish visibility on the current camera. */
+export function isExploreLocationVisible(
+  document: Document,
+  location: ExploreMapLocation,
+  map: Pick<MapboxGlMapLike, "project"> | undefined,
+): boolean {
+  const container = document.getElementById("map");
+  if (!container || !map?.project) return false;
+  try {
+    const rect = container.getBoundingClientRect();
+    const point = map.project([location.longitude, location.latitude]);
+    const margin = 24;
+    if (
+      !Number.isFinite(rect.width) ||
+      !Number.isFinite(rect.height) ||
+      rect.width <= margin * 2 ||
+      rect.height <= margin * 2 ||
+      !Number.isFinite(point.x) ||
+      !Number.isFinite(point.y) ||
+      point.x < margin ||
+      point.x > rect.width - margin ||
+      point.y < margin ||
+      point.y > rect.height - margin
+    )
+      return false;
+    const dock = document
+      .getElementById("unified-assistant-dock")
+      ?.getBoundingClientRect();
+    if (!dock || dock.width <= 0 || dock.height <= 0) return true;
+    const x = rect.left + point.x;
+    const y = rect.top + point.y;
+    return (
+      x < dock.left - margin ||
+      x > dock.right + margin ||
+      y < dock.top - margin ||
+      y > dock.bottom + margin
+    );
+  } catch {
+    // A provider which cannot project has not established visibility.
+    return false;
+  }
+}
+
 function clearTourPresentation(document: Document): void {
   const map = currentMap();
   if (map?.getLayer?.(TOUR_ROUTE_LAYER)) map.removeLayer?.(TOUR_ROUTE_LAYER);
@@ -1323,7 +1366,13 @@ export function installExploreLocationsControl({
       document.activeElement.matches(".morro-explore-marker")
         ? document.activeElement.dataset.markerId
         : undefined;
-    if (destroyed || (cameraOnly && externalTourOwnsMap)) return;
+    if (
+      destroyed ||
+      (cameraOnly &&
+        (externalTourOwnsMap ||
+          ["navigation", "tour"].includes(document.body?.dataset.mdMode ?? "")))
+    )
+      return;
     const generation = interactionGeneration;
     const categoryAtStart = activeCategory?.value;
     if (!cameraOnly) installDataset(locations, category, criteria);
@@ -1390,6 +1439,7 @@ export function installExploreLocationsControl({
       await replacing;
       if (
         externalTourOwnsMap ||
+        ["navigation", "tour"].includes(document.body?.dataset.mdMode ?? "") ||
         generation !== interactionGeneration ||
         requestedDataset !== datasetGeneration ||
         requestedRender !== renderGeneration ||
@@ -1443,13 +1493,17 @@ export function installExploreLocationsControl({
       }
       if (!cameraOnly)
         frameLocationsOnMap(document, locations, geospatialEngine);
-      else if (selected && !selectedInDataset)
+      else if (
+        selected &&
+        !isExploreLocationVisible(document, selected, nativeMap ?? currentMap())
+      )
         frameLocationsOnMap(document, [selected], geospatialEngine);
       setSheetStatus(locations.length === 0 ? "empty" : "ready");
       if (!cameraOnly) emitStateChange();
     } catch (error) {
       if (
         externalTourOwnsMap ||
+        ["navigation", "tour"].includes(document.body?.dataset.mdMode ?? "") ||
         generation !== interactionGeneration ||
         requestedDataset !== datasetGeneration ||
         requestedRender !== renderGeneration ||

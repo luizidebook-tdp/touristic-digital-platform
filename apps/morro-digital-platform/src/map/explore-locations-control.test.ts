@@ -36,6 +36,7 @@ import {
   normalizePlaceDetailImageSource,
   resolvePlaceDetailMedia,
   resolvePlaceDetailGallery,
+  isExploreLocationVisible,
   appliedMapFilterSummary,
   createExploreLocationDetailsCommand,
   type ExternalTourMapPreparation,
@@ -436,7 +437,10 @@ interface PlaceDetailConsumer {
   getLocations(): ExploreSearchResult[];
   getRenderedLocations(): ExploreSearchResult[];
   getFramedLocations(): ExploreSearchResult[];
+  getFramingCalls(): ExploreSearchResult[][];
   getSelectedMarkerIds(): string[];
+  setProjectedPoint(x: number, y: number): void;
+  setMapMode(mode: string): void;
   rails: Array<Array<{ label: string; value: string }>>;
   messages: Array<{ name: string; description: string; lineBreaks: number }>;
   events: Array<{ type: string; detail: Record<string, unknown> }>;
@@ -506,7 +510,7 @@ function actualPlaceDetailConsumer(
   // are fixtures; the ID, generation, copy and dispatch decisions are real.
   const javascript = ts.transpileModule(
     `
-      const {createPlaceDetailMedia,styleReady,publicPlaceCatalogText,locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator}=dependencies;
+      const {createPlaceDetailMedia,isExploreLocationVisible,styleReady,publicPlaceCatalogText,locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator}=dependencies;
       let styleGeneration=0;
       const placeDetailStyles={cancel(){styleGeneration++;},run(action){const generation=++styleGeneration;if(styleReady)void styleReady.then(()=>{if(generation===styleGeneration)action()}).catch(()=>{});else action();}};
       let activePlace,activePlaceLocation,activePlaceDetail,activeCategory,activeStage="menu",interactionGeneration=0;
@@ -540,9 +544,12 @@ function actualPlaceDetailConsumer(
       const ASSISTANT_FLOW_RESULTS_ID="assistant-category-results";
       const area=new HTMLElement();
       const map=new HTMLElement();map.dataset.exploreState="ready";elements.set("map",map);
+      map.getBoundingClientRect=()=>({left:0,top:0,width:390,height:844,right:390,bottom:844});
+      let projectedPoint={x:100,y:100};
+      const nativeMap={project:()=>projectedPoint},currentMap=()=>nativeMap;
       let storedFavorites=[];
       let mapMarkerElements=[];
-      const document={documentElement:{lang:locale},activeElement:null,
+      const document={body:{dataset:{mdMode:"explore"}},documentElement:{lang:locale},activeElement:null,
         defaultView:{localStorage:{getItem:()=>JSON.stringify({favoritePlaces:storedFavorites})},fetch() { throw Error("Unexpected direct network access"); },navigator:{geolocation:{getCurrentPosition(resolve){positionRequests+=1;if(holdPosition)resolvePosition=resolve;else resolve({coords:{latitude:-13.38,longitude:-38.91}});}}}},
         querySelector:()=>null,querySelectorAll:selector=>selector.includes("morro-explore-marker")?mapMarkerElements:[],
         getElementById:id=>elements.get(id)??null,
@@ -564,12 +571,12 @@ function actualPlaceDetailConsumer(
       let activeCategoryButton,activeSearchQuery="",restoreCurrentFlow,closeMarkerList,refreshMarkerList,returnToMarkerList;
       let placeReturnLocations=[],placeReturnCriteria=[],placeReturnMessage="",placeReturnIsSearch=false;
       let markerQueue=Promise.resolve(),markerProviderReady=Promise.resolve();
-      let renderedLocations=[],framedLocations=[];
+      let renderedLocations=[],framedLocations=[],framingCalls=[];
       const geospatialEngine={initialized:true,replaceMarkers:(markers)=>{renderedLocations=markers;mapMarkerElements=markers.map(marker=>{const el=new HTMLElement();el.dataset.markerId=marker.id;return el;});mapCalls+=1;return markerProviderReady;}};
       const markerRegistry=new Map();
       const clearDatasetGeometry=()=>{},publishDatasetGeometry=()=>{},syncLocationCounts=()=>{};
       const groupedMarkers=(locations,registry)=>{registry.clear();return locations.map((location,index)=>{const id=String(index);registry.set(id,[location]);return {...location,id};});};
-      const frameLocationsOnMap=(_document,locations)=>{framedLocations=locations;},clearTourPresentation=()=>{},resetCategoryTriggerState=()=>{},showMainMenu=()=>{},clearExploreRuntimeStatus=()=>{};
+      const frameLocationsOnMap=(_document,locations)=>{framedLocations=locations;framingCalls.push(locations);},clearTourPresentation=()=>{},resetCategoryTriggerState=()=>{},showMainMenu=()=>{},clearExploreRuntimeStatus=()=>{};
       const renderFlow=(text)=>{let message=elements.get(ASSISTANT_FLOW_MESSAGE_ID);if(!message){message=new HTMLElement();message.id=ASSISTANT_FLOW_MESSAGE_ID;elements.set(message.id,message);}message.textContent=text;return null;};
       const setExploreRuntimeStatus=()=>{},emitStateChange=()=>{};
       const shareActivePlace=()=>{events.push({type:"share-observed",detail:{}});},tourTicketingUrl=()=>null,startImmersiveTour=()=>{},returnFromPlaceDetail=()=>{};
@@ -578,6 +585,9 @@ function actualPlaceDetailConsumer(
       ${functions.join("\n")}
       ${declarations.join("\n")}
       return {document,execute,select:selectLocation,click:handlePlaceAction,readState:stateSnapshot,setFavorites:(value)=>{storedFavorites=value;},refreshSaved:()=>refreshSavedPlaceActions(),rails,messages,events,
+        setProjectedPoint:(x,y)=>{projectedPoint={x,y};},
+        setMapMode:mode=>{document.body.dataset.mdMode=mode;},
+        getFramingCalls:()=>framingCalls,
         setLocations:locations=>{visibleLocations=locations;datasetCategory="search";},getLocations:()=>visibleLocations,getRenderedLocations:()=>renderedLocations,getFramedLocations:()=>framedLocations,getSelectedMarkerIds:()=>mapMarkerElements.filter(el=>el.dataset.selected==="true").map(el=>el.dataset.markerId),
         listenerCount:type=>listeners.get(type)?.size??0,
         holdMarkers:()=>{let release;markerProviderReady=new Promise(resolve=>{release=resolve;});return ()=>{markerProviderReady=Promise.resolve();release();};},
@@ -594,6 +604,7 @@ function actualPlaceDetailConsumer(
     { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
   ).outputText;
   const dependencies = {
+    isExploreLocationVisible,
     styleReady,
     createPlaceDetailMedia,
     publicPlaceCatalogText,
@@ -1124,7 +1135,98 @@ function actualConversationRuntime(
   };
 }
 
+describe("selected place viewport visibility", () => {
+  const location = canonicalLocation("place-a");
+  const rect = { left: 30, top: 50, width: 390, height: 844 };
+  const dock = {
+    left: 30,
+    right: 420,
+    top: 650,
+    bottom: 894,
+    width: 390,
+    height: 244,
+  };
+  const document = {
+    getElementById: (id: string) =>
+      id === "map"
+        ? { getBoundingClientRect: () => rect }
+        : id === "unified-assistant-dock"
+          ? { getBoundingClientRect: () => dock }
+          : null,
+  } as unknown as Document;
+  const mapAt = (x: number, y: number) => ({ project: () => ({ x, y }) });
+  it("checks the projected point against the map and the assistant overlay", () => {
+    expect(isExploreLocationVisible(document, location, mapAt(100, 100))).toBe(
+      true,
+    );
+    expect(isExploreLocationVisible(document, location, mapAt(500, 100))).toBe(
+      false,
+    );
+    expect(isExploreLocationVisible(document, location, mapAt(100, 700))).toBe(
+      false,
+    );
+  });
+  it("cannot establish visibility from absent, invalid or failed projection", () => {
+    expect(isExploreLocationVisible(document, location, undefined)).toBe(false);
+    expect(isExploreLocationVisible(document, location, mapAt(NaN, 100))).toBe(
+      false,
+    );
+    const map = {
+      project: () => {
+        throw new Error("provider not ready");
+      },
+    };
+    expect(isExploreLocationVisible(document, location, map)).toBe(false);
+  });
+});
+
 describe("explicit details across actual runtime async boundaries", () => {
+  it("frames only the current selection after rapid switching with a pending provider", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const first = canonicalLocation("place-a");
+    const second = canonicalLocation("place-b");
+    consumer.setLocations([first, second]);
+    consumer.setProjectedPoint(500, 100);
+    const release = consumer.holdMarkers();
+    const selectingA = consumer.select(first);
+    const selectingB = consumer.select(second);
+    release();
+    await Promise.all([selectingA, selectingB]);
+    expect(consumer.getFramingCalls()).toEqual([[second]]);
+    expect(consumer.readState().placeId).toBe("place-b");
+  });
+  it.each(["navigation", "tour"])(
+    "does not move the camera after %s takes ownership during marker replacement",
+    async (mode) => {
+      const consumer = actualPlaceDetailConsumer("pt", (id) =>
+        canonicalDetail(id),
+      );
+      const first = canonicalLocation("place-a");
+      consumer.setLocations([first]);
+      consumer.setProjectedPoint(500, 100);
+      const release = consumer.holdMarkers();
+      const selecting = consumer.select(first);
+      consumer.setMapMode(mode);
+      release();
+      await selecting;
+      expect(consumer.getFramedLocations()).toEqual([]);
+    },
+  );
+  it("frames a selected member that has moved outside the viewport without changing the filter", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const first = canonicalLocation("place-a");
+    const second = canonicalLocation("place-b");
+    consumer.setLocations([first, second]);
+    consumer.setProjectedPoint(500, 100);
+    await consumer.select(first);
+    expect(consumer.getFramedLocations()).toEqual([first]);
+    expect(consumer.getLocations()).toEqual([first, second]);
+    expect(consumer.getRenderedLocations()).toHaveLength(2);
+  });
   it("retains the visible search dataset when selecting one place", async () => {
     const consumer = actualPlaceDetailConsumer("pt", (id) =>
       canonicalDetail(id),
@@ -1148,6 +1250,7 @@ describe("explicit details across actual runtime async boundaries", () => {
     const second = canonicalLocation("place-b");
     const outside = canonicalLocation("place-c");
     consumer.setLocations([first, second]);
+    consumer.setProjectedPoint(500, 100);
     await consumer.select(outside);
     expect(consumer.getLocations()).toEqual([first, second]);
     expect(consumer.getRenderedLocations().map((item) => item.placeId)).toEqual(
