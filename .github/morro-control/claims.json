@@ -185,6 +185,24 @@
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-19T23:00:00.000Z"
+    },
+    "MD-EXPLORE-DETAIL-PROOF-20261117": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "chore/acquire-explore-detail-proof-20261117",
+      "baseSha": "a1a6eb6cb57dd088e643a8e6ccf74f9f5cf0f548",
+      "paths": [
+        ".morro/changesets/MD-EXPLORE-DETAIL-PROOF-20261117.json",
+        ".github/workflows/assistant-input-menu-flow-v1-parity.yml",
+        ".github/workflows/assistant-place-actions-v1-parity.yml",
+        ".github/workflows/v1-explore-locations-browser-regression.yml",
+        "tooling/ci/explore-detail-browser-proof.mjs",
+        "tooling/ci/explore-detail-browser-proof.test.mjs"
+      ],
+      "domains": ["ci-release"],
+      "risk": "P1",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-19T23:00:00.000Z"
     }
   }
 }
