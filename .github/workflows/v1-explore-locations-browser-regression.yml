@@ -5,6 +5,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
+      - tooling/ci/explore-detail-browser-proof.mjs
+      - tooling/ci/explore-detail-browser-proof.test.mjs
       - ".github/actions/ci-bootstrap/**"
       - .github/workflows/v1-explore-locations-browser-regression.yml
       - apps/morro-digital-platform/src/main.ts
