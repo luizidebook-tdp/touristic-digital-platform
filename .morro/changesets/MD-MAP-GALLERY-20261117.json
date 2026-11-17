@@ -4,7 +4,7 @@
   "objective": "preserve-map-selection-context-and-show-published-place-photo-gallery",
   "baseSha": "9a68580ec36fca7525ed15a88f108c4b2a442c3a",
   "branch": "chore/acquire-map-gallery-20261117",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "high",
   "scope": "DESTINATION:MORRO",
   "owns": {
