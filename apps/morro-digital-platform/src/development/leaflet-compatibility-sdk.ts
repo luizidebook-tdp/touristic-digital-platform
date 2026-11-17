@@ -7,6 +7,12 @@ import type {
 interface LeafletMapLike {
   readonly attributionControl: { setPosition(position: "topright"): unknown };
   setView(center: [number, number], zoom?: number, options?: object): this;
+  getCenter(): Readonly<{ lat: number; lng: number }>;
+  getZoom(): number;
+  latLngToContainerPoint(
+    center: [number, number],
+  ): Readonly<{ x: number; y: number }>;
+  stop?(): this;
   remove(): void;
 }
 
@@ -114,7 +120,43 @@ export function createLeafletCompatibilitySdk(
 
     setCenter(center: [number, number]): void {
       this.#center = center;
+      this.#zoom = this.nativeMap.getZoom();
       this.nativeMap.setView(toLeafletCoordinates(center), this.#zoom, {
+        animate: false,
+      });
+    }
+
+    getCenter(): Readonly<{ lng: number; lat: number }> {
+      const { lng, lat } = this.nativeMap.getCenter();
+      return { lng, lat };
+    }
+
+    getZoom(): number {
+      return this.nativeMap.getZoom();
+    }
+
+    project(center: [number, number]): Readonly<{ x: number; y: number }> {
+      return this.nativeMap.latLngToContainerPoint(
+        toLeafletCoordinates(center),
+      );
+    }
+
+    setZoom(zoom: number): void {
+      const center = this.getCenter();
+      this.jumpTo({ center: [center.lng, center.lat], zoom });
+    }
+
+    stop(): void {
+      this.nativeMap.stop?.();
+    }
+
+    jumpTo(input: {
+      readonly center: [number, number];
+      readonly zoom: number;
+    }): void {
+      this.#center = input.center;
+      this.#zoom = input.zoom;
+      this.nativeMap.setView(toLeafletCoordinates(input.center), input.zoom, {
         animate: false,
       });
     }

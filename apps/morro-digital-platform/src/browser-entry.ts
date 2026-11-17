@@ -958,7 +958,18 @@ async function startBrowserWithProvider(provider: ResolvedMapProvider) {
               void installGrantedCurrentLocationMarker(map, provider.sdk);
             },
           }
-        : {}),
+        : {
+            onMapCreated: (map: MapboxGlMapLike) => {
+              clearBrowserNavigationRuntime();
+              application.exploreLocations.setNativeMap(map);
+              setV1MapboxCompatibilityAliases(map);
+              activeNavigationRuntimeInstall = installBrowserNavigationRuntime({
+                map,
+                sdk: provider.sdk,
+                document,
+              });
+            },
+          }),
     });
   } catch (error) {
     if (provider.mode !== "real") throw error;
@@ -981,6 +992,8 @@ async function startBrowserWithProvider(provider: ResolvedMapProvider) {
       document,
       createMarkerElement: createTourMarkerElement,
       onMapCreated: (map: MapboxGlMapLike) => {
+        application.exploreLocations.setNativeMap(map);
+        setV1MapboxCompatibilityAliases(map);
         activeDiscoverPoiCleanup = installDiscoverPoiMarkers(
           map,
           fallbackProvider.sdk,
