@@ -196,6 +196,22 @@
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-18T07:30:00.000Z"
+    },
+    "MD-OCI-PUBLISHED-MEDIA-20261117": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "chore/acquire-published-media-image-20261117",
+      "baseSha": "3a0781a25381883bc3d941195decff1413e86d93",
+      "paths": [
+        ".morro/changesets/MD-OCI-PUBLISHED-MEDIA-20261117.json",
+        "Dockerfile",
+        "tooling/quality/published-static-media.mjs",
+        "tooling/quality/published-static-media.test.mjs"
+      ],
+      "domains": ["ci-release"],
+      "risk": "P0",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-18T23:00:00.000Z"
     }
   }
 }

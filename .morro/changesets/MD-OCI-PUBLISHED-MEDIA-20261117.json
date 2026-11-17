@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-OCI-PUBLISHED-MEDIA-20261117",
+  "objective": "include-only-verified-published-legacy-media-in-immutable-runtime-image",
+  "baseSha": "3a0781a25381883bc3d941195decff1413e86d93",
+  "branch": "chore/acquire-published-media-image-20261117",
+  "state": "IMPLEMENTING",
+  "risk": "critical",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-OCI-PUBLISHED-MEDIA-20261117.json",
+      "Dockerfile",
+      "tooling/quality/published-static-media.mjs",
+      "tooling/quality/published-static-media.test.mjs"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "full-quality",
+    "domain-invariants",
+    "integration",
+    "exact-head-release-gates",
+    "automated-independent-proof",
+    "exact-head-identity",
+    "owner-scope-resolution"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "dependencies",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 4,
+      "maxSeconds": 1200
+    },
+    "commands": [
+      {
+        "id": "image-and-claim-invariants",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/fabric/ownership-path.test.mjs",
+          "tooling/fabric/claim-guard.test.mjs",
+          "tooling/control-state/mdctl-claim-lifecycle.test.mjs",
+          "tooling/quality/runtime-image-composition.test.mjs",
+          "tooling/ci/runtime-image-contract.test.mjs"
+        ],
+        "timeoutSeconds": 300
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
