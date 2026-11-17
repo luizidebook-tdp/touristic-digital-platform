@@ -31,6 +31,17 @@ FROM runtime-source AS runtime-root
 COPY tooling/quality/runtime-image-composition.mjs /runtime-image-composition.mjs
 RUN ["node", "/runtime-image-composition.mjs", "compose", "/runtime-root"]
 
+# Stage only manifest-published legacy media; the remaining source images do
+# not enter the final runtime. Validation aborts the build on asset drift.
+FROM runtime-source AS published-media
+WORKDIR /source
+COPY apps/morro-digital-platform/src/migration/legacy-commercial-media-mappings.ndjson apps/morro-digital-platform/src/migration/legacy-commercial-media-mappings.ndjson
+COPY tooling/quality/published-static-media.mjs tooling/quality/published-static-media.mjs
+COPY tooling/quality/published-static-media.test.mjs tooling/quality/published-static-media.test.mjs
+COPY images/fotos/ images/fotos/
+RUN ["node", "--test", "tooling/quality/published-static-media.test.mjs"]
+RUN ["node", "tooling/quality/published-static-media.mjs", "/source", "/selected-images"]
+
 FROM runtime-source AS base
 RUN apk add --no-cache npm && npm install --global pnpm@10.15.0
 WORKDIR /app
@@ -41,6 +52,7 @@ COPY apps/ apps/
 COPY dashboard/ dashboard/
 COPY tooling/ tooling/
 COPY tests/ tests/
+COPY --from=published-media /selected-images/ images/
 RUN pnpm install --frozen-lockfile
 
 FROM base AS development
