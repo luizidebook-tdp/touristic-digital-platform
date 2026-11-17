@@ -146,7 +146,7 @@ it.each([false, true])(
       setNativeMap,
     };
     const execute = compileFunction(script, ["dependencies"]) as (
-      dependencies: typeof dependencies,
+      context: typeof dependencies,
     ) => {
       start(input: typeof provider): Promise<{ ready: boolean }>;
       aliases: { mapboxPrimaryInstance?: typeof map };
