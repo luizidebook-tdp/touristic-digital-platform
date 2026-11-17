@@ -66,6 +66,7 @@ jobs:
         run: |
           node <<'NODE'
           const { chromium } = require('/tmp/pw/node_modules/playwright');
+          const detailProof = import('./tooling/ci/explore-detail-browser-proof.mjs');
           async function assertCatalogMarkerMembership(page, category, legacyCount, selectedName = null, filterTags = null) {
             const catalog = (await import(require('node:url').pathToFileURL(
               require('node:path').resolve('packages/search/dist/index.js')).href)).morroV1SearchCatalog;
@@ -269,13 +270,15 @@ jobs:
                 }
               }
 
-              async function waitStage(category, stage, count) {
+              async function waitStage(category, stage, count, origin) {
                 await page.locator(
                   `#map[data-explore-state="ready"][data-explore-category="${category}"][data-explore-stage="${stage}"]`,
                 ).waitFor({ state: 'attached', timeout: 8000 });
-                const selectedName = stage === 'detail' ? await page.locator('#map').getAttribute('data-explore-place') : null;
-                if (stage === 'detail' && !selectedName) throw new Error('Detail identity missing');
-                return assertCatalogMarkerMembership(page, category, count, selectedName);
+                if (stage === 'detail') {
+                  if (!origin) throw new Error('Independent detail origin missing');
+                  return (await detailProof).verifyDetailSelection(page, origin);
+                }
+                return assertCatalogMarkerMembership(page, category, count);
               }
 
               await submit('olá');
@@ -406,8 +409,9 @@ jobs:
               ).waitFor({ state: 'visible' });
               await waitStage('beaches', 'places', 8);
 
+              let detailOrigin = await (await detailProof).captureDetailSelectionOrigin(page, 'beaches', 'Primeira Praia');
               await submit('Primeira Praia');
-              await waitStage('beaches', 'detail', 1);
+              await waitStage('beaches', 'detail', 1, detailOrigin);
               await page.locator(
                 '#assistant-category-rail[data-rail-stage="detail"][data-context-place="Primeira Praia"] [data-value="ver fotos"]',
               ).waitFor({ state: 'visible', timeout: 8000 });
@@ -445,9 +449,11 @@ jobs:
                 '#assistant-category-rail[data-rail-stage="places"] [data-location-name="Primeira Praia"]',
               ).waitFor({ state: 'visible', timeout: 8000 });
               await waitStage('beaches', 'places', 8);
+              await (await detailProof).verifyDetailReturn(page, detailOrigin);
 
+              detailOrigin = await (await detailProof).captureDetailSelectionOrigin(page, 'beaches', 'Primeira Praia');
               await submit('Primeira Praia');
-              await waitStage('beaches', 'detail', 1);
+              await waitStage('beaches', 'detail', 1, detailOrigin);
               await submit('fotos');
               await page.locator('.assistant-photo-carousel').waitFor({ state: 'attached', timeout: 8000 });
 
