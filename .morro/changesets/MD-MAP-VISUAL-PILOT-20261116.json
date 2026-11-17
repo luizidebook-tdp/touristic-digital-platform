@@ -4,7 +4,7 @@
   "objective": "manual-place-detail-visual-pilot-with-central-map-canonical-media-accessible-order-stable-scroll-and-no-related-tours",
   "baseSha": "1de021c213160e759d84bbe57ad0a881480ebf8d",
   "branch": "feat/map-visual-pilot-20261116-v2",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "high",
   "scope": "DESTINATION:MORRO",
   "owns": {
