@@ -1560,6 +1560,7 @@ export function installExploreLocationsControl({
     if (!cameraOnly) installDataset(locations, category, criteria);
     const requestedDataset = datasetGeneration;
     const cameraGeneration = placeCamera.generation();
+    const cameraMap = nativeMap ?? currentMap();
 
     const setSheetStatus = (
       status: "loading" | "ready" | "empty" | "error",
@@ -1625,6 +1626,7 @@ export function installExploreLocationsControl({
         ["navigation", "tour"].includes(document.body?.dataset.mdMode ?? "") ||
         generation !== interactionGeneration ||
         cameraGeneration !== placeCamera.generation() ||
+        cameraMap !== (nativeMap ?? currentMap()) ||
         requestedDataset !== datasetGeneration ||
         requestedRender !== renderGeneration ||
         destroyed ||
@@ -1690,6 +1692,7 @@ export function installExploreLocationsControl({
         ["navigation", "tour"].includes(document.body?.dataset.mdMode ?? "") ||
         generation !== interactionGeneration ||
         cameraGeneration !== placeCamera.generation() ||
+        cameraMap !== (nativeMap ?? currentMap()) ||
         requestedDataset !== datasetGeneration ||
         requestedRender !== renderGeneration ||
         destroyed
