@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-EXPLORE-DETAIL-PROOF-20261117",
+  "objective": "prove-retained-filter-dataset-and-selected-place-browser-contract-with-strict-legacy-compatibility",
+  "baseSha": "a1a6eb6cb57dd088e643a8e6ccf74f9f5cf0f548",
+  "branch": "chore/acquire-explore-detail-proof-20261117",
+  "state": "IMPLEMENTING",
+  "risk": "high",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-EXPLORE-DETAIL-PROOF-20261117.json",
+      ".github/workflows/assistant-input-menu-flow-v1-parity.yml",
+      ".github/workflows/assistant-place-actions-v1-parity.yml",
+      ".github/workflows/v1-explore-locations-browser-regression.yml",
+      "tooling/ci/explore-detail-browser-proof.mjs",
+      "tooling/ci/explore-detail-browser-proof.test.mjs"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": ["changeset", "git-identity", "ownership", "proof-plan"]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 600
+    },
+    "commands": [
+      {
+        "id": "detail-selection-contract-negative-canaries",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/ci/explore-detail-browser-proof.test.mjs"
+        ],
+        "timeoutSeconds": 600
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
