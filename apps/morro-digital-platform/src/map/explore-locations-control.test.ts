@@ -41,6 +41,7 @@ import {
   appliedMapFilterSummary,
   createExploreLocationDetailsCommand,
   type ExternalTourMapPreparation,
+  type ExploreMapLocation,
   type ExploreLocationsCommand,
   type ExploreSearchResult,
   getAssistantCategoryButtonId,
@@ -425,7 +426,7 @@ interface PlaceDetailConsumer {
   detailOrder(): string[];
   setPresenterData(values: Record<string, string>): void;
   setAssistantHidden(hidden: boolean): void;
-  select(location: ExploreSearchResult): Promise<void>;
+  select(location: ExploreMapLocation): Promise<void>;
   changeLocale(locale: string): void;
   execute(command: ExploreLocationsCommand): Promise<boolean>;
   holdMarkers(): () => void;
@@ -435,7 +436,7 @@ interface PlaceDetailConsumer {
   readState(): { placeId?: string | null; stage: string };
   setFavorites(value: unknown[]): void;
   refreshSaved(): void;
-  setLocations(locations: ExploreSearchResult[]): void;
+  setLocations(locations: ExploreMapLocation[]): void;
   getLocations(): ExploreSearchResult[];
   getRenderedLocations(): ExploreSearchResult[];
   getFramedLocations(): ExploreSearchResult[];
@@ -445,7 +446,7 @@ interface PlaceDetailConsumer {
   setMapMode(mode: string): void;
   search(locations: ExploreSearchResult[]): void;
   back(): void;
-  openMembers(locations: ExploreSearchResult[]): () => void;
+  openMembers(locations: ExploreMapLocation[]): () => void;
   setCamera(longitude: number, latitude: number, zoom: number): void;
   camera(): {
     center: [number, number];
@@ -701,7 +702,12 @@ describe("selected canonical place detail action", () => {
       const consumer = actualPlaceDetailConsumer("pt", () =>
         canonicalDetail("place-a"),
       );
-      const location = { ...canonicalLocation("place-a"), source };
+      const location =
+        source === "canonical"
+          ? canonicalLocation("place-a")
+          : morroV1SearchCatalog.find(
+              (item) => item.name === "Primeira Praia",
+            )!;
       const members = [location, { ...location, name: "Other member" }];
       consumer.setLocations(members);
       await consumer.select(location);
@@ -784,7 +790,9 @@ describe("selected canonical place detail action", () => {
 
   it("restores detail actions in the language chosen while the group was open", async () => {
     const consumer = actualPlaceDetailConsumer("pt", () => null);
-    const a = { ...canonicalLocation("unused"), source: "catalog" as const };
+    const a = morroV1SearchCatalog.find(
+      (item) => item.name === "Primeira Praia",
+    )!;
     const members = [a, { ...a, name: "Other member" }];
     consumer.setLocations(members);
     await consumer.select(a);
