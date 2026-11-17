@@ -2,20 +2,6 @@
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
   "claims": {
-    "MD-AUTH-CONTRACT-D02-INVENTORY-PIN-20261106": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "infra/auth-contract-inventory-pin-20261106",
-      "baseSha": "7c988465d14408ccfece93629c85d14e3d714c4e",
-      "paths": [
-        ".github/workflows/auth-integration-contract.yml",
-        ".morro/changesets/MD-AUTH-CONTRACT-D02-INVENTORY-PIN-20261106.json"
-      ],
-      "domains": ["ci-release"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-06T21:31:03.791Z"
-    },
     "MD-ASSISTANT-PROFILE-IMPACT-20261112": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
