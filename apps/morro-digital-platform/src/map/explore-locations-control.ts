@@ -825,6 +825,174 @@ function getCurrentPosition(
   });
 }
 
+type ExploreCameraMap = MapboxGlMapLike & {
+  getPitch?(): number;
+  getBearing?(): number;
+  stop?(): void;
+  jumpTo?(options: {
+    center: [number, number];
+    zoom: number;
+    pitch?: number;
+    bearing?: number;
+  }): void;
+};
+
+/** Keeps the pre-detail camera within one map, dataset and interaction owner. */
+export function createExploreCameraReturn({
+  document,
+  read,
+}: {
+  document: Document;
+  read: () => {
+    map: ExploreCameraMap | undefined;
+    dataset: number;
+    interaction: number;
+    detail: boolean;
+    blocked: boolean;
+    destroyed: boolean;
+  };
+}) {
+  let epoch = 0;
+  let closed = false;
+  let saved:
+    | {
+        map: ExploreCameraMap;
+        dataset: number;
+        camera: {
+          center: [number, number];
+          zoom: number;
+          pitch?: number;
+          bearing?: number;
+        };
+      }
+    | undefined;
+  const owner = (value: string): void => {
+    document
+      .getElementById("map")
+      ?.setAttribute("data-explore-camera-owner", value);
+  };
+  const invalidate = (next = "dataset"): void => {
+    epoch += 1;
+    saved = undefined;
+    if (!closed) owner(next);
+  };
+  const Observer = document.defaultView?.MutationObserver;
+  const observer = Observer
+    ? new Observer((records) => {
+        if (
+          ["navigation", "tour"].includes(
+            document.body?.dataset.mdMode ?? "",
+          ) ||
+          records.some((record) =>
+            ["navigation", "tour"].includes(record.oldValue ?? ""),
+          )
+        )
+          invalidate("external");
+      })
+    : null;
+  if (document.body)
+    observer?.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["data-md-mode"],
+      attributeOldValue: true,
+    });
+  return Object.freeze({
+    invalidate,
+    generation: () => epoch,
+    select(alreadyDetail: boolean): void {
+      if (closed) return;
+      const state = read();
+      if (!alreadyDetail) {
+        invalidate("detail");
+        const map = state.map;
+        if (state.blocked || state.destroyed || !map) return;
+        try {
+          const center = map.getCenter?.();
+          const zoom = map.getZoom?.();
+          if (
+            !center ||
+            !Number.isFinite(center.lng) ||
+            !Number.isFinite(center.lat) ||
+            typeof zoom !== "number" ||
+            !Number.isFinite(zoom)
+          )
+            return;
+          const pitch = map.getPitch?.(),
+            bearing = map.getBearing?.();
+          if (
+            (pitch !== undefined && !Number.isFinite(pitch)) ||
+            (bearing !== undefined && !Number.isFinite(bearing))
+          )
+            return;
+          saved = {
+            map,
+            dataset: state.dataset,
+            camera: {
+              center: [center.lng, center.lat],
+              zoom,
+              ...(pitch === undefined ? {} : { pitch }),
+              ...(bearing === undefined ? {} : { bearing }),
+            },
+          };
+        } catch {
+          // A provider that cannot report its camera cannot establish a snapshot.
+        }
+      }
+      owner("detail");
+    },
+    restore(work: Promise<void>): Promise<boolean> {
+      if (closed) return Promise.resolve(false);
+      owner("restore");
+      const expectedEpoch = epoch,
+        expected = saved,
+        interaction = read().interaction;
+      return work.then(
+        () => {
+          const state = read();
+          if (
+            closed ||
+            state.destroyed ||
+            state.blocked ||
+            state.detail ||
+            epoch !== expectedEpoch ||
+            !expected ||
+            saved !== expected ||
+            state.interaction !== interaction ||
+            state.map !== expected.map ||
+            state.dataset !== expected.dataset
+          )
+            return false;
+          try {
+            const map = expected.map;
+            if (!map.jumpTo && !map.flyTo && !map.setZoom) return false;
+            map.stop?.();
+            if (map.jumpTo) map.jumpTo(expected.camera);
+            else if (map.flyTo) map.flyTo({ ...expected.camera, duration: 0 });
+            else {
+              if (!map.setZoom) return false;
+              map.setCenter(expected.camera.center);
+              map.setZoom(expected.camera.zoom);
+            }
+            saved = undefined;
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        () => false,
+      );
+    },
+    destroy(): void {
+      closed = true;
+      invalidate();
+      observer?.disconnect();
+      document
+        .getElementById("map")
+        ?.removeAttribute("data-explore-camera-owner");
+    },
+  });
+}
+
 export function installExploreLocationsControl({
   document,
 }: ExploreLocationsControlOptions): ExploreLocationsControl {
@@ -877,6 +1045,19 @@ export function installExploreLocationsControl({
   let retainedMenuContext = false;
   let datasetGeometryGeneration = 0;
   let externalTourOwnsMap = false;
+  const placeCamera = createExploreCameraReturn({
+    document,
+    read: () => ({
+      map: nativeMap ?? currentMap(),
+      dataset: datasetGeometryGeneration,
+      interaction: interactionGeneration,
+      detail: activeStage === "detail",
+      blocked:
+        externalTourOwnsMap ||
+        ["navigation", "tour"].includes(document.body?.dataset.mdMode ?? ""),
+      destroyed,
+    }),
+  });
   const geometryElement = document.getElementById("map");
   geometryElement?.setAttribute("data-explore-dataset-contract", "bounds-v1");
   const clearDatasetGeometry = (): void => {
@@ -950,6 +1131,7 @@ export function installExploreLocationsControl({
     category?: string,
     criteria: readonly AppliedExploreCriterion[] = Object.freeze([]),
   ): void => {
+    placeCamera.invalidate();
     datasetGeneration += 1;
     datasetGeometryGeneration += 1;
     externalTourOwnsMap = false;
@@ -1377,6 +1559,7 @@ export function installExploreLocationsControl({
     const categoryAtStart = activeCategory?.value;
     if (!cameraOnly) installDataset(locations, category, criteria);
     const requestedDataset = datasetGeneration;
+    const cameraGeneration = placeCamera.generation();
 
     const setSheetStatus = (
       status: "loading" | "ready" | "empty" | "error",
@@ -1441,6 +1624,7 @@ export function installExploreLocationsControl({
         externalTourOwnsMap ||
         ["navigation", "tour"].includes(document.body?.dataset.mdMode ?? "") ||
         generation !== interactionGeneration ||
+        cameraGeneration !== placeCamera.generation() ||
         requestedDataset !== datasetGeneration ||
         requestedRender !== renderGeneration ||
         destroyed ||
@@ -1505,6 +1689,7 @@ export function installExploreLocationsControl({
         externalTourOwnsMap ||
         ["navigation", "tour"].includes(document.body?.dataset.mdMode ?? "") ||
         generation !== interactionGeneration ||
+        cameraGeneration !== placeCamera.generation() ||
         requestedDataset !== datasetGeneration ||
         requestedRender !== renderGeneration ||
         destroyed
@@ -1859,6 +2044,7 @@ export function installExploreLocationsControl({
   };
 
   const backToMenu = (restoreFocus = true): void => {
+    const returningFromDetail = activeStage === "detail";
     interactionGeneration += 1;
     datasetGeneration += 1;
     markerRegistry.clear();
@@ -1912,6 +2098,7 @@ export function installExploreLocationsControl({
       void replaceMarkersSerial([]).catch(() => undefined);
       updateMapState(0);
     }
+    if (returningFromDetail) void placeCamera.restore(markerQueue);
     placeReturnLocations = Object.freeze([]);
     placeReturnCriteria = Object.freeze([]);
     placeReturnMessage = "";
@@ -2325,6 +2512,11 @@ export function installExploreLocationsControl({
       reason === "locale" &&
       activeStage === "detail" &&
       activePlaceLocation === location;
+    if (!refreshingLocale) {
+      if (visibleLocations.length === 0)
+        installDataset([location], location.category, datasetCriteria);
+      placeCamera.select(activeStage === "detail");
+    }
     const generation = ++interactionGeneration;
     const category = location.category;
     const locale = currentLocale();
@@ -2551,6 +2743,7 @@ export function installExploreLocationsControl({
     criteria: readonly AppliedExploreCriterion[] = activeCategory
       ? [{ kind: "category", value: activeCategory.value }]
       : [],
+    preserveCamera = false,
   ): void => {
     if (!activeCategory) return;
     placeReturnLocations = Object.freeze([...locations]);
@@ -2566,7 +2759,7 @@ export function installExploreLocationsControl({
       label: string;
       value: string;
       action: "location" | "back-filters";
-      location?: MorroV1SearchCatalogItem;
+      location?: ExploreMapLocation;
     }>[] = [
       ...locations.map((location) => ({
         label: location.name,
@@ -2594,7 +2787,7 @@ export function installExploreLocationsControl({
       locations,
       activeCategory.value,
       false,
-      false,
+      preserveCamera,
       criteria,
     );
     emitStateChange();
@@ -2609,6 +2802,7 @@ export function installExploreLocationsControl({
       : "ready",
     statusText?: string,
     criteria: readonly AppliedExploreCriterion[] = placeReturnCriteria,
+    preserveCamera = false,
   ): void => {
     resetCategoryTriggerState();
     activeCategory = undefined;
@@ -2670,15 +2864,23 @@ export function installExploreLocationsControl({
       emitStateChange();
       return;
     }
-    void renderLocationsOnMap(locations, "search", false, false, criteria);
+    void renderLocationsOnMap(
+      locations,
+      "search",
+      false,
+      preserveCamera,
+      criteria,
+    );
     emitStateChange();
   };
 
   const returnFromPlaceDetail = (): void => {
+    interactionGeneration += 1;
     if (returnToMarkerList) {
       const restore = returnToMarkerList;
       returnToMarkerList = undefined;
       restore();
+      void placeCamera.restore(markerQueue);
       return;
     }
     if (placeReturnIsSearch) {
@@ -2695,10 +2897,17 @@ export function installExploreLocationsControl({
             activeSearchQuery,
             placeReturnLocations.length,
           ),
+        activeSearchQuery,
+        undefined,
+        undefined,
+        placeReturnCriteria,
+        true,
       );
+      void placeCamera.restore(markerQueue);
       return;
     }
     if (!activeCategory) {
+      backToMenu();
       return;
     }
     const locations =
@@ -2708,17 +2917,12 @@ export function installExploreLocationsControl({
     const message =
       placeReturnMessage ||
       getV1ExploreUiCopy(currentLocale()).chooseOther(activeCategory.label);
-    renderPlaces(
-      locations.filter(
-        (location): location is MorroV1SearchCatalogItem =>
-          !("source" in location),
-      ),
-      message,
-      placeReturnCriteria,
-    );
+    renderPlaces(locations, message, placeReturnCriteria, true);
+    void placeCamera.restore(markerQueue);
   };
 
   const startImmersiveTour = (tourId: string): void => {
+    placeCamera.invalidate("external");
     exploreFlowBottomSheet?.hide();
     activePlace = undefined;
     activePlaceLocation = undefined;
@@ -2981,13 +3185,12 @@ export function installExploreLocationsControl({
           }
           const returnLocations = visibleLocations;
           const category = datasetCategory;
-          const returnCriteria = datasetCriteria;
           const returnAction = (): void => {
             activePlace = undefined;
             activePlaceLocation = undefined;
             activeStage = previousStage;
             restoreCurrentFlow = previousFlow;
-            installDataset(returnLocations, category, returnCriteria);
+            datasetGeneration += 1;
             void renderLocationsOnMap(returnLocations, category, false, true);
             openMarkerMembers(members);
           };
@@ -3504,6 +3707,7 @@ export function installExploreLocationsControl({
   return Object.freeze({
     async prepareExternalTour() {
       if (destroyed) return null;
+      placeCamera.invalidate("external");
       externalTourOwnsMap = true;
       datasetCriteria = Object.freeze([]);
       placeReturnCriteria = Object.freeze([]);
@@ -3635,9 +3839,12 @@ export function installExploreLocationsControl({
       );
     },
     setNativeMap(map: MapboxGlMapLike | undefined) {
+      const previousMap = nativeMap ?? currentMap();
       detachNativeMap?.();
       detachNativeMap = undefined;
       nativeMap = map;
+      if (previousMap !== (nativeMap ?? currentMap()))
+        placeCamera.invalidate(activeStage === "detail" ? "detail" : "dataset");
       if (!map?.project || !map.on || !map.off) return;
       const redraw = (): void => {
         if (cameraRedrawQueued || destroyed || nativeMap !== map) return;
@@ -3671,6 +3878,7 @@ export function installExploreLocationsControl({
       };
     },
     destroy() {
+      placeCamera.destroy();
       placeDetailStyles.cancel();
       detailMinimizeButton?.removeEventListener(
         "click",
