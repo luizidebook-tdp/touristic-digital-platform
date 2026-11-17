@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-AUTH-WARNING-COMPATIBILITY-20261117",
+  "objective": "preserve-native-proxy-diagnostics-and-strict-auth-exec-test-security-assertions",
+  "baseSha": "8243efb263e37d5928d8b4ea3eb2f6b67471dbf8",
+  "branch": "chore/auth-warning-claim-20261117",
+  "state": "IMPLEMENTING",
+  "risk": "high",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      "tooling/workspace/github-auth-exec.test.mjs",
+      ".morro/changesets/MD-AUTH-WARNING-COMPATIBILITY-20261117.json"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity",
+    "full-quality",
+    "domain-invariants",
+    "exact-head-release-gates"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 900
+    },
+    "commands": [
+      {
+        "id": "claim-lifecycle-contract",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/control-state/mdctl-claim-lifecycle.test.mjs"
+        ],
+        "timeoutSeconds": 300
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "integration",
+      "automated-independent-proof",
+      "exact-head-identity",
+      "full-quality",
+      "domain-invariants",
+      "exact-head-release-gates"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}

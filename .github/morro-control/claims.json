@@ -203,6 +203,20 @@
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-17T19:30:00.000Z"
+    },
+    "MD-AUTH-WARNING-COMPATIBILITY-20261117": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "chore/auth-warning-claim-20261117",
+      "baseSha": "8243efb263e37d5928d8b4ea3eb2f6b67471dbf8",
+      "paths": [
+        "tooling/workspace/github-auth-exec.test.mjs",
+        ".morro/changesets/MD-AUTH-WARNING-COMPATIBILITY-20261117.json"
+      ],
+      "domains": ["ci-release"],
+      "risk": "P1",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-18T07:30:00.000Z"
     }
   }
 }
