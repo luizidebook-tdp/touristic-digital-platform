@@ -5,6 +5,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
+      - tooling/ci/explore-detail-browser-proof.mjs
+      - tooling/ci/explore-detail-browser-proof.test.mjs
       - ".github/actions/ci-bootstrap/**"
       - .github/workflows/v1-explore-locations-browser-regression.yml
       - apps/morro-digital-platform/src/main.ts
@@ -74,6 +76,7 @@ jobs:
           node <<'NODE'
           const { writeFileSync } = require('node:fs');
           const { chromium } = require('/tmp/pw/node_modules/playwright');
+          const detailProof = import('./tooling/ci/explore-detail-browser-proof.mjs');
 
           const viewports = [
             { id: 'mobile', width: 390, height: 844 },
@@ -176,11 +179,11 @@ jobs:
             }
           }
 
-          async function waitMap(page, category, count, stage) {
+          async function waitMap(page, category, count, stage, origin) {
             await page.locator(`#map[data-explore-state="ready"][data-explore-category="${category}"][data-explore-stage="${stage}"]`).waitFor({ state: 'attached', timeout: 8000 });
             if (stage === 'detail') {
-              if (Number(await page.locator('#map').getAttribute('data-map-marker-count')) !== count) throw new Error('Detail marker count diverged');
-              return;
+              if (!origin) throw new Error('Independent detail origin missing');
+              return (await detailProof).verifyDetailSelection(page, origin);
             }
             const { morroV1SearchCatalog } = await import('./packages/search/dist/morro-v1-search-catalog.js');
             const expected = morroV1SearchCatalog.filter(item => item.category === category).map(item => `${item.category}:${item.name}`);
@@ -368,9 +371,12 @@ jobs:
               await page.locator('#assistant-category-rail[data-rail-stage="places"] [data-location-name="Primeira Praia"]').waitFor({ state: 'visible' });
               await waitMap(page, 'beaches', 8, 'places');
 
+              const detailOrigin = await (await detailProof).captureDetailSelectionOrigin(page, 'beaches', 'Primeira Praia');
               await page.locator('#assistant-category-rail[data-rail-stage="places"] [data-location-name="Primeira Praia"]').click();
-              await waitMap(page, 'beaches', 1, 'detail');
-              const center = await waitForSelectedMapCamera(page, -38.9142193, -13.3776181);
+              await waitMap(page, 'beaches', 1, 'detail', detailOrigin);
+              const center = detailOrigin.contract.mode === 'LEGACY_SINGLE'
+                ? await waitForSelectedMapCamera(page, -38.9142193, -13.3776181)
+                : await (await detailProof).verifySelectedVisibility(page, detailOrigin);
               await page.locator(
                 '#assistant-category-rail[data-rail-stage="detail"][data-context-place="Primeira Praia"]',
               ).waitFor({ state: 'visible', timeout: 8000 });
@@ -484,7 +490,7 @@ jobs:
               if (
                 !selected.flowRemoved ||
                 !selected.mainHidden ||
-                selected.markerCount !== '1' ||
+                (detailOrigin.contract.mode === 'LEGACY_SINGLE' && selected.markerCount !== '1') ||
                 selected.activeTour !== null ||
                 selected.popupVisible ||
                 expectedBeachDetailValues.some(value => !placeState.actionValues.includes(value))
@@ -499,17 +505,20 @@ jobs:
               ).click();
               await page.locator('#assistant-category-rail[data-rail-stage="places"]').waitFor({ state: 'visible', timeout: 5000 });
               await waitMap(page, 'beaches', 8, 'places');
+              await (await detailProof).verifyDetailReturn(page, detailOrigin);
               const returnedPlaces = await page.locator('#assistant-category-rail[data-rail-stage="places"] [data-location-name]').count();
               if (returnedPlaces !== 8) {
                 throw new Error(`Detail back did not restore the V1 places list: ${returnedPlaces}`);
               }
 
+              const escapeOrigin = await (await detailProof).captureDetailSelectionOrigin(page, 'beaches', 'Primeira Praia');
               await page.locator('#assistant-category-rail[data-rail-stage="places"] [data-location-name="Primeira Praia"]').click();
               await page.locator(
                 '#assistant-category-rail[data-rail-stage="detail"][data-context-place="Primeira Praia"]',
               ).waitFor({ state: 'visible', timeout: 5000 });
               await page.keyboard.press('Escape');
               await page.locator('#assistant-category-rail[data-rail-stage="places"]').waitFor({ state: 'visible', timeout: 5000 });
+              await (await detailProof).verifyDetailReturn(page, escapeOrigin);
 
               await page.keyboard.press('Escape');
               await assertMainMenu(page);

@@ -5,6 +5,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
     paths:
+      - tooling/ci/explore-detail-browser-proof.mjs
+      - tooling/ci/explore-detail-browser-proof.test.mjs
       - ".github/actions/ci-bootstrap/action.yml"
       - .github/workflows/assistant-place-actions-v1-parity.yml
       - apps/morro-digital-platform/src/assistant/**
@@ -55,6 +57,7 @@ jobs:
         run: |
           node <<'NODE'
           const { chromium } = require('/tmp/pw/node_modules/playwright');
+          const detailProof = import('./tooling/ci/explore-detail-browser-proof.mjs');
 
           (async () => {
             const browser = await chromium.launch({ headless: true });
@@ -166,10 +169,9 @@ jobs:
                 await page.locator(
                   `#assistant-category-rail[data-rail-stage="places"][data-context-category="${category}"] [data-location-name="${place}"]`,
                 ).waitFor({ state: 'visible', timeout: 8000 });
+                const detailOrigin = await (await detailProof).captureDetailSelectionOrigin(page, category, place);
                 await submit(place);
-                await page.locator(
-                  `#map[data-explore-category="${category}"][data-explore-stage="detail"][data-map-marker-count="1"]`,
-                ).waitFor({ state: 'attached', timeout: 8000 });
+                await (await detailProof).verifyDetailSelection(page, detailOrigin);
                 const detailAction = detailActionValues[category];
                 if (!detailAction) throw new Error(`Missing detail action for ${category}`);
                 await page.locator(

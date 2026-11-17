@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-EXPLORE-DETAIL-PROOF-20261117",
   "objective": "prove-retained-filter-dataset-and-selected-place-browser-contract-with-strict-legacy-compatibility",
-  "baseSha": "a1a6eb6cb57dd088e643a8e6ccf74f9f5cf0f548",
+  "baseSha": "d1a352b9773506cccd5eb83c0c2903e66d6d0e44",
   "branch": "chore/acquire-explore-detail-proof-20261117",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {
