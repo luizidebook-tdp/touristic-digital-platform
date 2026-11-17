@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-LEAFLET-CAMERA-CENSUS-20261117",
+  "objective": "classify-only-reversible-leaflet-camera-binding-maintenance-without-allowing-partial-destination-activation",
+  "baseSha": "a171de2f886f39ed04ab76b97b24a80338a6f5df",
+  "branch": "chore/acquire-leaflet-camera-census-20261117",
+  "state": "IMPLEMENTING",
+  "risk": "high",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      "tooling/ci/itacare-activation-census.mjs",
+      "tooling/ci/itacare-activation-census.test.mjs",
+      ".morro/changesets/MD-LEAFLET-CAMERA-CENSUS-20261117.json"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": ["changeset", "git-identity", "ownership", "proof-plan"]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 600
+    },
+    "commands": [
+      {
+        "id": "itacare-activation-maintenance-negatives",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/ci/itacare-activation-census.test.mjs"
+        ],
+        "timeoutSeconds": 600
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
