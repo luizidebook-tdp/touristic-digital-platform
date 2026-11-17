@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { morroV1SearchCatalog } from "@touristic/search";
 import { installExploreMapViewportV1 } from "./explore-map-viewport-v1.js";
 
-function harness(semantic = true) {
+function harness(semantic = true, animationFrames = false) {
+  const frames: FrameRequestCallback[] = [];
   const dataset: Record<string, string> = {
     exploreState: "ready",
     exploreCategory: "beaches",
@@ -25,6 +26,14 @@ function harness(semantic = true) {
     innerHeight: 844,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
+    ...(animationFrames
+      ? {
+          requestAnimationFrame: (callback: FrameRequestCallback) => {
+            frames.push(callback);
+            return frames.length;
+          },
+        }
+      : {}),
   };
   const locations = morroV1SearchCatalog
     .filter((item) => item.category === "beaches")
@@ -59,12 +68,85 @@ function harness(semantic = true) {
     fitBounds,
     flush,
     reframe,
+    advanceFrame: () => {
+      const callback = frames.shift();
+      if (!callback) throw new Error("No pending animation frame");
+      callback(0);
+    },
   };
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("semantic dataset viewport", () => {
+  it("does not frame a detail opened before the observer's pending frames", () => {
+    const h = harness(true, true);
+    h.dataset.exploreStage = "detail";
+    h.advanceFrame();
+    h.advanceFrame();
+    expect(h.fitBounds).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite a restored camera when return happens between frames", () => {
+    const h = harness(true, true);
+    h.dataset.exploreStage = "detail";
+    h.dataset.exploreCameraOwner = "detail";
+    h.advanceFrame();
+    h.dataset.exploreStage = "places";
+    h.dataset.exploreCameraOwner = "restore";
+    h.advanceFrame();
+    expect(h.fitBounds).not.toHaveBeenCalled();
+  });
+
+  it.each(["detail", "restore", "foreign"])(
+    "waits for explicit dataset ownership after camera owner %s",
+    async (owner) => {
+      const h = harness();
+      h.dataset.exploreCameraOwner = owner;
+      await h.flush();
+      h.view.innerWidth = 500;
+      await h.reframe();
+      expect(h.fitBounds).not.toHaveBeenCalled();
+      h.dataset.exploreCameraOwner = "dataset";
+      await h.reframe();
+      expect(h.fitBounds).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("reads the latest dataset identity when it changes between frames", () => {
+    const h = harness(true, true);
+    h.advanceFrame();
+    h.dataset.exploreDatasetGeneration = "2";
+    h.dataset.exploreDatasetBounds = "[[-39,-14],[-38,-13]]";
+    h.advanceFrame();
+    expect(h.fitBounds).toHaveBeenCalledExactlyOnceWith(
+      [
+        [-39, -14],
+        [-38, -13],
+      ],
+      expect.any(Object),
+    );
+  });
+
+  it.each(["navigation", "tour"])(
+    "respects %s taking ownership between frames",
+    (mode) => {
+      const h = harness(true, true);
+      h.advanceFrame();
+      h.body.dataset.mdMode = mode;
+      h.advanceFrame();
+      expect(h.fitBounds).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not frame after destruction between pending frames", () => {
+    const h = harness(true, true);
+    h.advanceFrame();
+    h.controller.destroy();
+    h.advanceFrame();
+    expect(h.fitBounds).not.toHaveBeenCalled();
+  });
+
   it("frames actual dataset coordinates independently of symbols/catalog and reserves the dock", async () => {
     const h = harness();
     await h.flush();
