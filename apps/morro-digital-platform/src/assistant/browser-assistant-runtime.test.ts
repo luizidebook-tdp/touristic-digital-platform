@@ -1,4 +1,7 @@
-import { ensureFeatureStyles } from "../map/feature-styles.js";
+import {
+  ensureFeatureStyles,
+  createFeatureStyleGate,
+} from "../map/feature-styles.js";
 import { readFileSync } from "node:fs";
 import { compileFunction } from "node:vm";
 import {
@@ -454,7 +457,11 @@ function pendingAssistantFixture() {
   const document = {
     documentElement: { lang: "pt" },
     querySelectorAll: () => assistantNodes,
-    getElementById: () => ({ textContent: "Selected place A" }),
+    querySelector: () => null,
+    getElementById: () => ({
+      textContent: "Selected place A",
+      getAttribute: () => null,
+    }),
     dispatchEvent: (event: unknown) => events.push(event),
   } as unknown as Document;
   const conversation = getAssistantConversationOrchestrator(document);
@@ -503,6 +510,7 @@ function pendingAssistantFixture() {
       details = turn;
     },
     ensureFeatureStyles: () => null,
+    placeDetailStyles: createFeatureStyleGate(document),
     dispatchAssistantUiState: (_document: Document, state: string) =>
       uiStates.push(state),
     currentLocale: () => "pt",
