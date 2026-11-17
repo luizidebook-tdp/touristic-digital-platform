@@ -3366,6 +3366,65 @@ body[data-md-mode="discover"] .md-home-header h1 {
   object-fit: cover;
 }
 
+#unified-assistant-dock .md-place-detail-gallery-previous,
+#unified-assistant-dock .md-place-detail-gallery-next {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 50%;
+  background: var(--md-color-surface-card);
+  color: var(--md-color-text-primary);
+  font-size: 1.75rem;
+  cursor: pointer;
+}
+
+#unified-assistant-dock .md-place-detail-gallery-previous {
+  inset-inline-start: 0.5rem;
+}
+#unified-assistant-dock .md-place-detail-gallery-next {
+  inset-inline-end: 0.5rem;
+}
+
+#unified-assistant-dock .md-place-detail-media:focus-visible,
+#unified-assistant-dock .md-place-detail-gallery-previous:focus-visible,
+#unified-assistant-dock .md-place-detail-gallery-next:focus-visible {
+  outline: var(--md-focus-ring-width) solid var(--md-focus-ring-color);
+  outline-offset: 2px;
+}
+
+#unified-assistant-dock .md-place-detail-gallery-counter {
+  position: absolute;
+  inset-block-end: 0.5rem;
+  inset-inline-end: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 1rem;
+  background: var(--md-color-text-primary);
+  color: var(--md-color-text-inverse);
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+}
+
+#unified-assistant-dock .md-place-detail-gallery-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+#unified-assistant-dock .md-place-detail-gallery-previous[hidden],
+#unified-assistant-dock .md-place-detail-gallery-next[hidden],
+#unified-assistant-dock .md-place-detail-gallery-counter[hidden] {
+  display: none;
+}
+
 #unified-assistant-dock .md-place-detail-media-fallback {
   padding: 1rem;
   color: var(--md-color-text-secondary);

@@ -32,12 +32,16 @@ import {
 } from "./explore-locations-v1-flow.js";
 
 import {
+  createExploreCameraReturn,
   createPlaceDetailMedia,
   normalizePlaceDetailImageSource,
   resolvePlaceDetailMedia,
+  resolvePlaceDetailGallery,
+  isExploreLocationVisible,
   appliedMapFilterSummary,
   createExploreLocationDetailsCommand,
   type ExternalTourMapPreparation,
+  type ExploreMapLocation,
   type ExploreLocationsCommand,
   type ExploreSearchResult,
   getAssistantCategoryButtonId,
@@ -202,6 +206,7 @@ function actualDatasetProducer() {
     const markerRegistry=new Map(), initialRegistry=new Map(), attributes=new Map();
     const geometryElement={setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k),get dataset(){return {exploreState:attributes.get("data-explore-state")}}};
     const document={getElementById:()=>geometryElement};
+    const placeCamera={invalidate(){}};
     const removeAssistantFlowResults=()=>{}, resetCategoryTriggerState=()=>{}, restoreCategoryRail=()=>{},showMainMenu=()=>{},clearExploreRuntimeStatus=()=>{},emitStateChange=()=>{syncLocationCounts();};
     const exploreFlowBottomSheet={hide(){}},immersiveTourController={destroy(){}};
     let geospatialEngine={initialized:true,replaceMarkers:async()=>{}};
@@ -421,7 +426,7 @@ interface PlaceDetailConsumer {
   detailOrder(): string[];
   setPresenterData(values: Record<string, string>): void;
   setAssistantHidden(hidden: boolean): void;
-  select(location: ExploreSearchResult): Promise<void>;
+  select(location: ExploreMapLocation): Promise<void>;
   changeLocale(locale: string): void;
   execute(command: ExploreLocationsCommand): Promise<boolean>;
   holdMarkers(): () => void;
@@ -431,6 +436,24 @@ interface PlaceDetailConsumer {
   readState(): { placeId?: string | null; stage: string };
   setFavorites(value: unknown[]): void;
   refreshSaved(): void;
+  setLocations(locations: ExploreMapLocation[]): void;
+  getLocations(): ExploreSearchResult[];
+  getRenderedLocations(): ExploreSearchResult[];
+  getFramedLocations(): ExploreSearchResult[];
+  getFramingCalls(): ExploreSearchResult[][];
+  getSelectedMarkerIds(): string[];
+  setProjectedPoint(x: number, y: number): void;
+  setMapMode(mode: string): void;
+  search(locations: ExploreSearchResult[]): void;
+  back(): void;
+  openMembers(locations: ExploreMapLocation[]): () => void;
+  setCamera(longitude: number, latitude: number, zoom: number): void;
+  camera(): {
+    center: [number, number];
+    zoom: number;
+    pitch: number;
+    bearing: number;
+  };
   rails: Array<Array<{ label: string; value: string }>>;
   messages: Array<{ name: string; description: string; lineBreaks: number }>;
   events: Array<{ type: string; detail: Record<string, unknown> }>;
@@ -474,6 +497,11 @@ function actualPlaceDetailConsumer(
     "openCategory",
     "openCategoryByValue",
     "renderPlaces",
+    "renderSearchPlaces",
+    "returnFromPlaceDetail",
+    "placeCamera",
+    "backToMenu",
+    "openMarkerMembers",
   ]);
   const declarations: string[] = [];
   const functions: string[] = [];
@@ -500,7 +528,7 @@ function actualPlaceDetailConsumer(
   // are fixtures; the ID, generation, copy and dispatch decisions are real.
   const javascript = ts.transpileModule(
     `
-      const {createPlaceDetailMedia,styleReady,publicPlaceCatalogText,locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator}=dependencies;
+      const {createExploreCameraReturn,createPlaceDetailMedia,isExploreLocationVisible,styleReady,publicPlaceCatalogText,locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator}=dependencies;
       let styleGeneration=0;
       const placeDetailStyles={cancel(){styleGeneration++;},run(action){const generation=++styleGeneration;if(styleReady)void styleReady.then(()=>{if(generation===styleGeneration)action()}).catch(()=>{});else action();}};
       let activePlace,activePlaceLocation,activePlaceDetail,activeCategory,activeStage="menu",interactionGeneration=0;
@@ -515,7 +543,9 @@ function actualPlaceDetailConsumer(
         getAttribute(name){return this[name]??null;}
         setAttribute(name,value){this[name]=value;if(name.startsWith("data-"))this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;}
         removeAttribute(name){delete this[name];if(name.startsWith("data-"))delete this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())];}
-        appendChild(node){this.children.push(node);if(node.id)elements.set(node.id,node);}
+        get childNodes(){return this.children;}
+        appendChild(node){this.children.push(node);node.parentNode=this;node.isConnected=true;if(node.id)elements.set(node.id,node);}
+        prepend(node){this.children.unshift(node);}
         replaceChildren(...nodes){
           this.children=nodes;
           if(this.className==="md-assistant-place-detail-description")this.textContent=nodes.map(node=>node.textContent).join("");
@@ -524,7 +554,8 @@ function actualPlaceDetailConsumer(
           }
         }
         addEventListener(){}
-        remove(){elements.delete(this.id);}
+        remove(){if(elements.get(this.id)===this)elements.delete(this.id);if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(node=>node!==this);this.isConnected=false;}
+        replaceWith(node){const parent=this.parentNode;if(parent){parent.children=parent.children.map(child=>child===this?node:child);node.parentNode=parent;node.isConnected=true;}this.isConnected=false;if(node.id)elements.set(node.id,node);}
       }
       class HTMLButtonElement extends HTMLElement {}
       class CustomEvent { constructor(type,init) { this.type=type;this.detail=init.detail; } }
@@ -533,10 +564,15 @@ function actualPlaceDetailConsumer(
       const ASSISTANT_FLOW_RESULTS_ID="assistant-category-results";
       const area=new HTMLElement();
       const map=new HTMLElement();map.dataset.exploreState="ready";elements.set("map",map);
+      map.getBoundingClientRect=()=>({left:0,top:0,width:390,height:844,right:390,bottom:844});
+      let projectedPoint={x:100,y:100};
+      let camera={center:[-38.91,-13.38],zoom:14,pitch:20,bearing:35};
+      const nativeMap={project:()=>projectedPoint,getCenter:()=>({lng:camera.center[0],lat:camera.center[1]}),getZoom:()=>camera.zoom,getPitch:()=>camera.pitch,getBearing:()=>camera.bearing,stop(){},jumpTo:value=>{camera={...camera,...value};}},currentMap=()=>nativeMap;
       let storedFavorites=[];
-      const document={documentElement:{lang:locale},activeElement:null,
+      let mapMarkerElements=[];
+      const document={body:{dataset:{mdMode:"explore"}},documentElement:{lang:locale},activeElement:null,
         defaultView:{localStorage:{getItem:()=>JSON.stringify({favoritePlaces:storedFavorites})},fetch() { throw Error("Unexpected direct network access"); },navigator:{geolocation:{getCurrentPosition(resolve){positionRequests+=1;if(holdPosition)resolvePosition=resolve;else resolve({coords:{latitude:-13.38,longitude:-38.91}});}}}},
-        querySelector:()=>null,querySelectorAll:()=>[],
+        querySelector:()=>null,querySelectorAll:selector=>selector.includes("morro-explore-marker")?mapMarkerElements:[],
         getElementById:id=>elements.get(id)??null,
         createElement:(tag)=>Object.assign(new HTMLElement(),{tagName:tag}),
         addEventListener:(type,listener)=>{const current=listeners.get(type)??new Set();current.add(listener);listeners.set(type,current);},
@@ -546,7 +582,7 @@ function actualPlaceDetailConsumer(
       const assistantMessagesArea=()=>area,hideMainMenu=()=>{};
       const currentLocale=()=>normalizeAssistantVoiceLanguage(document.documentElement.lang);
       const currentCategories=()=>getExploreLocationsCategories(currentLocale());
-      const contextualRailScroll=null,exploreFlowBottomSheet={hide(){},setStatus(){}};
+      const contextualRailScroll=null,exploreFlowBottomSheet={hide(){},setStatus(){},getState(){return null;}};
       const UNREGISTERED_COMMERCIAL_ACTION_IDS=new Set();
       const removeAssistantFlowResults=()=>{},requestAssistantOpen=()=>{};
       const renderContextualRail=(_stage,_label,options)=>{rails.push(options);return null;};
@@ -556,19 +592,29 @@ function actualPlaceDetailConsumer(
       let activeCategoryButton,activeSearchQuery="",restoreCurrentFlow,closeMarkerList,refreshMarkerList,returnToMarkerList;
       let placeReturnLocations=[],placeReturnCriteria=[],placeReturnMessage="",placeReturnIsSearch=false;
       let markerQueue=Promise.resolve(),markerProviderReady=Promise.resolve();
-      const geospatialEngine={initialized:true,replaceMarkers:()=>{mapCalls+=1;return markerProviderReady;}};
+      let renderedLocations=[],framedLocations=[],framingCalls=[];
+      const geospatialEngine={initialized:true,replaceMarkers:(markers)=>{renderedLocations=markers;mapMarkerElements=markers.map(marker=>{const el=new HTMLElement();el.dataset.markerId=marker.id;return el;});mapCalls+=1;return markerProviderReady;}};
       const markerRegistry=new Map();
       const clearDatasetGeometry=()=>{},publishDatasetGeometry=()=>{},syncLocationCounts=()=>{};
-      const groupedMarkers=locations=>locations.map((location,index)=>({id:String(index),...location}));
-      const frameLocationsOnMap=()=>{},clearTourPresentation=()=>{},resetCategoryTriggerState=()=>{},showMainMenu=()=>{},clearExploreRuntimeStatus=()=>{};
-      const renderFlow=(text)=>{let message=elements.get(ASSISTANT_FLOW_MESSAGE_ID);if(!message){message=new HTMLElement();message.id=ASSISTANT_FLOW_MESSAGE_ID;elements.set(message.id,message);}message.textContent=text;return null;};
+      const groupedMarkers=(locations,registry)=>{registry.clear();return locations.map((location,index)=>{const id=String(index);registry.set(id,[location]);return {...location,id};});};
+      const frameLocationsOnMap=(_document,locations)=>{framedLocations=locations;framingCalls.push(locations);if(locations[0])camera={...camera,center:[locations[0].longitude,locations[0].latitude],zoom:16};},clearTourPresentation=()=>{},resetCategoryTriggerState=()=>{},showMainMenu=()=>{},clearExploreRuntimeStatus=()=>{};
+      const discoveryClusterLabel=(count)=>String(count)+" places";
+      // Keep other menu boundaries thin; model the group source consumed by the single-message controller.
+      const renderFlow=(text)=>{let message=elements.get(ASSISTANT_FLOW_MESSAGE_ID);if(!message){message=new HTMLElement();message.id=ASSISTANT_FLOW_MESSAGE_ID;area.appendChild(message);}message.dataset.messageType="category-flow";message.children=[];message.textContent=text;if(activeMarkerMembers){elements.get(ASSISTANT_FLOW_RESULTS_ID)?.remove();const results=new HTMLElement();results.id=ASSISTANT_FLOW_RESULTS_ID;results.setAttribute("aria-label",text);area.appendChild(results);}return null;};
       const setExploreRuntimeStatus=()=>{},emitStateChange=()=>{};
-      const shareActivePlace=()=>{events.push({type:"share-observed",detail:{}});},tourTicketingUrl=()=>null,startImmersiveTour=()=>{},returnFromPlaceDetail=()=>{};
+      const shareActivePlace=()=>{events.push({type:"share-observed",detail:{}});},tourTicketingUrl=()=>null,startImmersiveTour=()=>{},loadHybridGlobalMarkers=()=>{};
       const refreshCategoryPresentation=()=>{},restoreCategoryRail=()=>{},renderExploreRuntimeStatus=()=>{};
       const exploreRuntimeStatusDescriptor=null,immersiveTourController=null;
       ${functions.join("\n")}
       ${declarations.join("\n")}
       return {document,execute,select:selectLocation,click:handlePlaceAction,readState:stateSnapshot,setFavorites:(value)=>{storedFavorites=value;},refreshSaved:()=>refreshSavedPlaceActions(),rails,messages,events,
+        search:locations=>renderSearchPlaces(locations,"Resultados","query"),back:returnFromPlaceDetail,
+        openMembers:locations=>{openMarkerMembers(locations);const restore=closeMarkerList;return ()=>restore?.();},
+        setCamera:(longitude,latitude,zoom)=>{camera={...camera,center:[longitude,latitude],zoom};},camera:()=>({...camera,center:[...camera.center]}),
+        setProjectedPoint:(x,y)=>{projectedPoint={x,y};},
+        setMapMode:mode=>{document.body.dataset.mdMode=mode;},
+        getFramingCalls:()=>framingCalls,
+        setLocations:locations=>{visibleLocations=locations;datasetCategory="search";},getLocations:()=>visibleLocations,getRenderedLocations:()=>renderedLocations,getFramedLocations:()=>framedLocations,getSelectedMarkerIds:()=>mapMarkerElements.filter(el=>el.dataset.selected==="true").map(el=>el.dataset.markerId),
         listenerCount:type=>listeners.get(type)?.size??0,
         holdMarkers:()=>{let release;markerProviderReady=new Promise(resolve=>{release=resolve;});return ()=>{markerProviderReady=Promise.resolve();release();};},
         holdPosition:()=>{holdPosition=true;return ()=>{holdPosition=false;resolvePosition?.({coords:{latitude:-13.38,longitude:-38.91}});};},
@@ -584,6 +630,8 @@ function actualPlaceDetailConsumer(
     { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
   ).outputText;
   const dependencies = {
+    createExploreCameraReturn,
+    isExploreLocationVisible,
     styleReady,
     createPlaceDetailMedia,
     publicPlaceCatalogText,
@@ -649,6 +697,157 @@ function canonicalDetail(placeId: string, description = "Full place details") {
 }
 
 describe("selected canonical place detail action", () => {
+  it.each(["canonical", "catalog"] as const)(
+    "restores the selected %s detail after inspecting a marker group",
+    async (source) => {
+      const consumer = actualPlaceDetailConsumer("pt", () =>
+        canonicalDetail("place-a"),
+      );
+      const location =
+        source === "canonical"
+          ? canonicalLocation("place-a")
+          : morroV1SearchCatalog.find(
+              (item) => item.name === "Primeira Praia",
+            )!;
+      const members = [location, { ...location, name: "Other member" }];
+      consumer.setLocations(members);
+      await consumer.select(location);
+      const message = consumer.document.getElementById(
+        "assistant-category-results-message",
+      )!;
+      const content = Array.from(message.childNodes);
+      const area = message.parentNode as HTMLElement;
+      area.scrollTop = 37;
+      const before = consumer.snapshot();
+      const camera = consumer.camera();
+      const close = consumer.openMembers(members);
+      expect(consumer.snapshot().stage).toBe("places");
+      expect(
+        consumer.document.getElementById("assistant-category-results"),
+      ).not.toBeNull();
+      close();
+      expect(consumer.snapshot()).toEqual(before);
+      expect(consumer.camera()).toEqual(camera);
+      const restored = consumer.document.getElementById(message.id)!;
+      expect(restored.dataset.messageType).toBe("place-detail");
+      expect(restored).toBe(message);
+      expect(Array.from(restored.childNodes)).toEqual(content);
+      expect(area.scrollTop).toBe(37);
+      expect(
+        consumer.document.getElementById("assistant-category-results"),
+      ).toBeNull();
+      expect(consumer.rails.at(-1)).toContainEqual(
+        expect.objectContaining({ value: "__back_to_places__" }),
+      );
+    },
+  );
+
+  it("ignores a stale group return after selecting another place", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const a = canonicalLocation("place-a");
+    const b = { ...canonicalLocation("place-b"), name: "Other place" };
+    consumer.setLocations([a, b]);
+    await consumer.select(a);
+    const close = consumer.openMembers([a, b]);
+    await consumer.select(b);
+    const before = consumer.snapshot();
+    const message = consumer.document.getElementById(
+      "assistant-category-results-message",
+    );
+    close();
+    expect(consumer.snapshot()).toEqual(before);
+    expect(
+      consumer.document.getElementById("assistant-category-results-message"),
+    ).toBe(message);
+  });
+
+  it("resumes an unresolved canonical detail without moving the map", async () => {
+    let resolveFirst!: (detail: ReturnType<typeof canonicalDetail>) => void;
+    const pending = new Promise<ReturnType<typeof canonicalDetail>>(
+      (resolve) => {
+        resolveFirst = resolve;
+      },
+    );
+    let requests = 0;
+    const consumer = actualPlaceDetailConsumer("pt", () =>
+      ++requests === 1
+        ? pending
+        : canonicalDetail("place-a", "Resolved detail"),
+    );
+    const a = canonicalLocation("place-a");
+    const b = { ...a, name: "Other member" };
+    consumer.setLocations([a, b]);
+    const selection = consumer.select(a);
+    await Promise.resolve();
+    const close = consumer.openMembers([a, b]);
+    resolveFirst(canonicalDetail("place-a", "Response while group is open"));
+    await selection;
+    const camera = consumer.camera();
+    const mapCalls = consumer.snapshot().mapCalls;
+    close();
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(requests).toBe(2);
+    expect(consumer.snapshot().stage).toBe("detail");
+    expect(consumer.snapshot().mapCalls).toBe(mapCalls);
+    expect(consumer.camera()).toEqual(camera);
+    expect(consumer.messages.at(-1)?.description).toBe("Resolved detail");
+  });
+
+  it("restores detail actions in the language chosen while the group was open", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", () => null);
+    const a = morroV1SearchCatalog.find(
+      (item) => item.name === "Primeira Praia",
+    )!;
+    const members = [a, { ...a, name: "Other member" }];
+    consumer.setLocations(members);
+    await consumer.select(a);
+    const camera = consumer.camera();
+    const mapCalls = consumer.snapshot().mapCalls;
+    const close = consumer.openMembers(members);
+    consumer.changeLocale("he");
+    close();
+    await Promise.resolve();
+    expect(consumer.snapshot().stage).toBe("detail");
+    expect(consumer.snapshot().mapCalls).toBe(mapCalls);
+    expect(consumer.camera()).toEqual(camera);
+    expect(consumer.rails.at(-1)).toContainEqual(
+      expect.objectContaining({
+        value: "__back_to_places__",
+        label: `⬅️ ${getV1ExploreLabel("back", "he")}`,
+      }),
+    );
+  });
+
+  it("hydrates confirmed details when styles settle while the marker group is open", async () => {
+    let releaseStyles!: () => void;
+    const styles = new Promise<void>((resolve) => {
+      releaseStyles = resolve;
+    });
+    const consumer = actualPlaceDetailConsumer(
+      "pt",
+      () => canonicalDetail("place-a"),
+      styles,
+    );
+    const a = canonicalLocation("place-a");
+    const members = [a, { ...a, name: "Other member" }];
+    consumer.setLocations(members);
+    await consumer.select(a);
+    expect(consumer.media()).toBeUndefined();
+    const close = consumer.openMembers(members);
+    releaseStyles();
+    await Promise.resolve();
+    const camera = consumer.camera();
+    const requests = consumer.snapshot().detailRequests;
+    close();
+    await Promise.resolve();
+    expect(consumer.media()).toEqual({ state: "missing", src: undefined });
+    expect(consumer.messages.at(-1)?.description).toBe("Full place details");
+    expect(consumer.snapshot().detailRequests).toBe(requests);
+    expect(consumer.camera()).toEqual(camera);
+  });
+
   it.each([
     ["pt", "Ver detalhes"],
     ["en", "View details"],
@@ -1114,7 +1313,337 @@ function actualConversationRuntime(
   };
 }
 
+describe("selected place viewport visibility", () => {
+  const location = canonicalLocation("place-a");
+  const rect = { left: 30, top: 50, width: 390, height: 844 };
+  const dock = {
+    left: 30,
+    right: 420,
+    top: 650,
+    bottom: 894,
+    width: 390,
+    height: 244,
+  };
+  const document = {
+    getElementById: (id: string) =>
+      id === "map"
+        ? { getBoundingClientRect: () => rect }
+        : id === "unified-assistant-dock"
+          ? { getBoundingClientRect: () => dock }
+          : null,
+  } as unknown as Document;
+  const mapAt = (x: number, y: number) => ({ project: () => ({ x, y }) });
+  it("checks the projected point against the map and the assistant overlay", () => {
+    expect(isExploreLocationVisible(document, location, mapAt(100, 100))).toBe(
+      true,
+    );
+    expect(isExploreLocationVisible(document, location, mapAt(500, 100))).toBe(
+      false,
+    );
+    expect(isExploreLocationVisible(document, location, mapAt(100, 700))).toBe(
+      false,
+    );
+  });
+  it("cannot establish visibility from absent, invalid or failed projection", () => {
+    expect(isExploreLocationVisible(document, location, undefined)).toBe(false);
+    expect(isExploreLocationVisible(document, location, mapAt(NaN, 100))).toBe(
+      false,
+    );
+    const map = {
+      project: () => {
+        throw new Error("provider not ready");
+      },
+    };
+    expect(isExploreLocationVisible(document, location, map)).toBe(false);
+  });
+});
+
+describe("camera return ownership", () => {
+  function cameraFixture() {
+    const jumpTo = vi.fn(),
+      stop = vi.fn();
+    const map = {
+      getCenter: () => ({ lng: -38.92, lat: -13.39 }),
+      getZoom: () => 13,
+      jumpTo,
+      stop,
+    };
+    const state = {
+      map,
+      dataset: 1,
+      interaction: 1,
+      detail: false,
+      blocked: false,
+      destroyed: false,
+    };
+    let changed: MutationCallback = () => {};
+    const attributes = new Map<string, string>();
+    const element = {
+      setAttribute: (key: string, value: string) => attributes.set(key, value),
+      removeAttribute: (key: string) => attributes.delete(key),
+    };
+    const document = {
+      body: { dataset: { mdMode: "explore" } },
+      getElementById: () => element,
+      defaultView: {
+        MutationObserver: class {
+          constructor(callback: MutationCallback) {
+            changed = callback;
+          }
+          observe() {}
+          disconnect() {}
+        },
+      },
+    } as unknown as Document;
+    const camera = createExploreCameraReturn({
+      document,
+      read: () => state as never,
+    });
+    return {
+      camera,
+      state,
+      map,
+      jumpTo,
+      stop,
+      document,
+      changed: (oldValue: string) =>
+        changed([{ oldValue } as MutationRecord], {} as MutationObserver),
+    };
+  }
+  it.each([
+    "dataset",
+    "map",
+    "interaction",
+    "destroyed",
+    "blocked",
+    "detail",
+  ] as const)("rejects a pending return after %s changes", async (field) => {
+    const f = cameraFixture();
+    f.camera.select(false);
+    let release!: () => void;
+    const returning = f.camera.restore(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    if (field === "map") f.state.map = { ...f.map };
+    else if (field === "dataset" || field === "interaction") f.state[field]++;
+    else f.state[field] = true;
+    release();
+    expect(await returning).toBe(false);
+    expect(f.jumpTo).not.toHaveBeenCalled();
+    expect(f.stop).not.toHaveBeenCalled();
+  });
+  it.each(["navigation", "tour"])(
+    "invalidates a snapshot even when %s starts and ends in one mutation batch",
+    async (mode) => {
+      const f = cameraFixture();
+      f.camera.select(false);
+      f.changed(mode);
+      expect(await f.camera.restore(Promise.resolve())).toBe(false);
+      expect(f.jumpTo).not.toHaveBeenCalled();
+    },
+  );
+  it("does not restore after disposal or failed marker replacement", async () => {
+    const f = cameraFixture();
+    f.camera.select(false);
+    expect(
+      await f.camera.restore(Promise.reject(Error("provider unavailable"))),
+    ).toBe(false);
+    f.camera.destroy();
+    expect(await f.camera.restore(Promise.resolve())).toBe(false);
+    expect(f.jumpTo).not.toHaveBeenCalled();
+  });
+});
+
 describe("explicit details across actual runtime async boundaries", () => {
+  it("restores a direct selection's origin when returning to the menu without prior search results", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    consumer.setCamera(-38.93, -13.4, 11);
+    const origin = consumer.camera();
+    consumer.setProjectedPoint(500, 100);
+    await consumer.select(canonicalLocation("place-a"));
+    expect(consumer.camera()).not.toEqual(origin);
+    consumer.back();
+    await vi.waitFor(() => expect(consumer.camera()).toEqual(origin));
+    expect(consumer.readState().stage).toBe("menu");
+  });
+  it("restores the manual camera after returning to the original canonical search results", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const results = [
+      canonicalLocation("place-a"),
+      canonicalLocation("place-b"),
+    ];
+    consumer.search(results);
+    await vi.waitFor(() =>
+      expect(consumer.getRenderedLocations()).toHaveLength(2),
+    );
+    consumer.setCamera(-38.925, -13.39, 12);
+    const origin = consumer.camera();
+    consumer.setProjectedPoint(500, 100);
+    await consumer.select(canonicalLocation("place-outside"));
+    expect(consumer.camera()).not.toEqual(origin);
+    const fits = consumer.getFramingCalls().length;
+    consumer.back();
+    await vi.waitFor(() => expect(consumer.camera()).toEqual(origin));
+    expect(consumer.getLocations()).toEqual(results);
+    expect(consumer.getRenderedLocations().map((item) => item.placeId)).toEqual(
+      ["place-a", "place-b"],
+    );
+    expect(consumer.getFramingCalls()).toHaveLength(fits);
+  });
+  it("keeps the pre-detail origin through rapid selection and locale changes", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const results = [
+      canonicalLocation("place-a"),
+      canonicalLocation("place-b"),
+    ];
+    consumer.search(results);
+    await vi.waitFor(() =>
+      expect(consumer.getRenderedLocations()).toHaveLength(2),
+    );
+    consumer.setCamera(-38.93, -13.4, 11);
+    const origin = consumer.camera();
+    consumer.setProjectedPoint(500, 100);
+    await consumer.select(results[0]!);
+    await consumer.select(results[1]!);
+    consumer.changeLocale("en");
+    consumer.back();
+    await vi.waitFor(() => expect(consumer.camera()).toEqual(origin));
+  });
+  it("does not restore an older return after another place takes over its pending marker queue", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const results = [
+      canonicalLocation("place-a"),
+      canonicalLocation("place-b"),
+    ];
+    consumer.search(results);
+    await vi.waitFor(() =>
+      expect(consumer.getRenderedLocations()).toHaveLength(2),
+    );
+    consumer.setCamera(-38.93, -13.4, 11);
+    consumer.setProjectedPoint(500, 100);
+    await consumer.select(results[0]!);
+    const release = consumer.holdMarkers();
+    consumer.back();
+    const selecting = consumer.select(results[1]!);
+    release();
+    await selecting;
+    expect(consumer.camera().center).toEqual([
+      results[1]!.longitude,
+      results[1]!.latitude,
+    ]);
+    expect(consumer.readState().placeId).toBe("place-b");
+  });
+  it.each(["navigation", "tour"])(
+    "leaves the camera to %s when returning with pending markers",
+    async (mode) => {
+      const consumer = actualPlaceDetailConsumer("pt", (id) =>
+        canonicalDetail(id),
+      );
+      const results = [canonicalLocation("place-a")];
+      consumer.search(results);
+      await vi.waitFor(() =>
+        expect(consumer.getRenderedLocations()).toHaveLength(1),
+      );
+      consumer.setCamera(-38.93, -13.4, 11);
+      await consumer.select(results[0]!);
+      const release = consumer.holdMarkers();
+      consumer.back();
+      consumer.setMapMode(mode);
+      consumer.setCamera(-38.95, -13.5, 18);
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(consumer.camera().center).toEqual([-38.95, -13.5]);
+    },
+  );
+  it("frames only the current selection after rapid switching with a pending provider", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const first = canonicalLocation("place-a");
+    const second = canonicalLocation("place-b");
+    consumer.setLocations([first, second]);
+    consumer.setProjectedPoint(500, 100);
+    const release = consumer.holdMarkers();
+    const selectingA = consumer.select(first);
+    const selectingB = consumer.select(second);
+    release();
+    await Promise.all([selectingA, selectingB]);
+    expect(consumer.getFramingCalls()).toEqual([[second]]);
+    expect(consumer.readState().placeId).toBe("place-b");
+  });
+  it.each(["navigation", "tour"])(
+    "does not move the camera after %s takes ownership during marker replacement",
+    async (mode) => {
+      const consumer = actualPlaceDetailConsumer("pt", (id) =>
+        canonicalDetail(id),
+      );
+      const first = canonicalLocation("place-a");
+      consumer.setLocations([first]);
+      consumer.setProjectedPoint(500, 100);
+      const release = consumer.holdMarkers();
+      const selecting = consumer.select(first);
+      consumer.setMapMode(mode);
+      release();
+      await selecting;
+      expect(consumer.getFramedLocations()).toEqual([]);
+    },
+  );
+  it("frames a selected member that has moved outside the viewport without changing the filter", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const first = canonicalLocation("place-a");
+    const second = canonicalLocation("place-b");
+    consumer.setLocations([first, second]);
+    consumer.setProjectedPoint(500, 100);
+    await consumer.select(first);
+    expect(consumer.getFramedLocations()).toEqual([first]);
+    expect(consumer.getLocations()).toEqual([first, second]);
+    expect(consumer.getRenderedLocations()).toHaveLength(2);
+  });
+  it("retains the visible search dataset when selecting one place", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const first = canonicalLocation("place-a");
+    const second = canonicalLocation("place-b");
+    consumer.setLocations([first, second]);
+    await consumer.select(first);
+    expect(consumer.getLocations()).toEqual([first, second]);
+    expect(consumer.readState().placeId).toBe("place-a");
+    expect(consumer.getRenderedLocations()).toHaveLength(2);
+    expect(consumer.getSelectedMarkerIds()).toEqual(["0"]);
+    expect(consumer.getFramedLocations()).toEqual([]);
+  });
+
+  it("temporarily shows an out-of-filter selection without replacing search results or conflating same names", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (id) =>
+      canonicalDetail(id),
+    );
+    const first = canonicalLocation("place-a");
+    const second = canonicalLocation("place-b");
+    const outside = canonicalLocation("place-c");
+    consumer.setLocations([first, second]);
+    consumer.setProjectedPoint(500, 100);
+    await consumer.select(outside);
+    expect(consumer.getLocations()).toEqual([first, second]);
+    expect(consumer.getRenderedLocations().map((item) => item.placeId)).toEqual(
+      ["place-a", "place-b", "place-c"],
+    );
+    expect(consumer.readState().placeId).toBe("place-c");
+    expect(consumer.getSelectedMarkerIds()).toEqual(["2"]);
+    expect(consumer.getFramedLocations()).toEqual([outside]);
+  });
   it.each([
     ["mostrar só praias", undefined],
     ["mostrar todos os locais", undefined],
@@ -1491,7 +2020,7 @@ describe("confirmed details locale refresh", () => {
     await consumer.select(canonicalLocation("place-b"));
     englishA.resolve(canonicalDetail("place-a", "Obsolete A details"));
     await settleDetailRefresh();
-    expect(consumer.messages.at(-1)?.description).toBe("");
+    expect(consumer.messages.at(-1)?.description).toBe("Details for place-b");
     expect(consumer.presenter().conversationTurnId).toBeUndefined();
     consumer.click("place-action:info:place-a");
     expect(consumer.conversation.recentTurns()).toHaveLength(1);
@@ -1511,7 +2040,7 @@ describe("confirmed details locale refresh", () => {
     await consumer.select(canonicalLocation("place-a"));
     consumer.changeLocale("en");
     await settleDetailRefresh();
-    expect(consumer.messages.at(-1)?.description).toBe("");
+    expect(consumer.messages.at(-1)?.description).toBe("Full place details");
     expect(consumer.presenter().conversationTurnId).toBeUndefined();
     expect(consumer.conversation.recentTurns()).toHaveLength(1);
   });
@@ -1965,10 +2494,10 @@ describe("manual visual pilot in the active detail flow", () => {
     },
   });
 
-  it("uses the confirmed place media on explicit details without changing the map", async () => {
+  it("shows the selected place media and retains it on explicit details without changing the map", async () => {
     const consumer = actualPlaceDetailConsumer("pt", photoDetail);
     await consumer.select(canonicalLocation("place-a"));
-    expect(consumer.media()).toBeUndefined();
+    expect(consumer.media()?.src).toBe("/images/place-a.jpg");
     const before = consumer.snapshot();
     consumer.click("place-action:info:place-a");
     expect(consumer.media()).toEqual({
@@ -1984,8 +2513,8 @@ describe("manual visual pilot in the active detail flow", () => {
     ]);
     expect(consumer.snapshot()).toEqual(before);
     await consumer.select(canonicalLocation("place-b"));
-    expect(consumer.media()).toBeUndefined();
-    expect(consumer.presenter().placeDetailVisual).toBeUndefined();
+    expect(consumer.media()?.src).toBe("/images/place-b.jpg");
+    expect(consumer.presenter().placeDetailVisual).toBe("true");
     consumer.click("place-action:info:place-b");
     expect(consumer.media()?.src).toBe("/images/place-b.jpg");
   });
@@ -2050,7 +2579,9 @@ describe("manual visual pilot in the active detail flow", () => {
       if (change === "minimize") consumer.setAssistantHidden(true);
       ready();
       await styles;
-      expect(consumer.media()).toBeUndefined();
+      if (change === "selection")
+        expect(consumer.media()?.src).toBe("/images/place-b.jpg");
+      else expect(consumer.media()).toBeUndefined();
     },
   );
 
@@ -2144,6 +2675,8 @@ describe("canonical detail media presentation", () => {
     loading = "";
     decoding = "";
     dataset: Record<string, string> = {};
+    attributes: Record<string, string> = {};
+    focused = false;
     children: ElementFixture[] = [];
     parent: ElementFixture | undefined;
     listeners = new Map<string, () => void>();
@@ -2152,8 +2685,18 @@ describe("canonical detail media presentation", () => {
       child.parent = this;
       this.children.push(child);
     }
+    prepend(child: ElementFixture) {
+      child.parent = this;
+      this.children.unshift(child);
+    }
     addEventListener(name: string, callback: () => void) {
       this.listeners.set(name, callback);
+    }
+    setAttribute(name: string, value: string) {
+      this.attributes[name] = value;
+    }
+    focus() {
+      this.focused = true;
     }
     remove() {
       if (this.parent)
@@ -2213,6 +2756,184 @@ describe("canonical detail media presentation", () => {
           "Toca",
         ),
       ).toEqual({ src: "/images/toca.jpg", alt: "Toca" });
+    });
+
+    it("deduplicates published cover and gallery without mixing place identities", () => {
+      const input = media();
+      const first = input.coverImage!;
+      const second = {
+        ...first,
+        mediaId: "second",
+        providerReference: "/images/toca2.jpg",
+      };
+      const duplicateUrl = { ...second, mediaId: "third" };
+      expect(
+        resolvePlaceDetailGallery(
+          { ...input, gallery: [first, second, duplicateUrl] },
+          "place-toca",
+          "Toca",
+        ),
+      ).toEqual([
+        { src: "/images/toca.jpg", alt: "Toca do Morcego" },
+        { src: "/images/toca2.jpg", alt: "Toca do Morcego" },
+      ]);
+      expect(
+        resolvePlaceDetailGallery(
+          { ...input, gallery: [first, second] },
+          "other-place",
+          "Toca",
+        ),
+      ).toEqual([]);
+    });
+
+    it("ignores an obsolete image failure after switching photos", () => {
+      const fixture = dom();
+      const input = media();
+      const figure = createPlaceDetailMedia(
+        fixture.document,
+        {
+          ...input,
+          gallery: [
+            {
+              ...input.coverImage!,
+              mediaId: "next",
+              providerReference: "/images/next.jpg",
+            },
+          ],
+        },
+        "place-toca",
+        "Toca",
+        "pt",
+      ) as unknown as ElementFixture;
+      const oldImage = figure.children.find((node) => node.tagName === "img")!;
+      const next = figure.children.find(
+        (node) => node.className === "md-place-detail-gallery-next",
+      )!;
+      next.listeners.get("click")!();
+      oldImage.listeners.get("error")!();
+      expect(figure.children.find((node) => node.tagName === "img")?.src).toBe(
+        "/images/next.jpg",
+      );
+      expect(
+        figure.children.find(
+          (node) => node.className === "md-place-detail-gallery-counter",
+        )?.textContent,
+      ).toBe("2 de 2");
+      expect(figure.dataset.mediaState).toBe("ready");
+    });
+
+    it("points previous and next controls in the Hebrew reading direction", () => {
+      const fixture = dom();
+      const input = media();
+      const figure = createPlaceDetailMedia(
+        fixture.document,
+        {
+          ...input,
+          gallery: [
+            {
+              ...input.coverImage!,
+              mediaId: "next",
+              providerReference: "/images/next.jpg",
+            },
+          ],
+        },
+        "place-toca",
+        "Toca",
+        "he",
+      ) as unknown as ElementFixture;
+      expect(
+        figure.children.find(
+          (node) => node.className === "md-place-detail-gallery-previous",
+        )?.textContent,
+      ).toBe("›");
+      expect(
+        figure.children.find(
+          (node) => node.className === "md-place-detail-gallery-next",
+        )?.textContent,
+      ).toBe("‹");
+    });
+
+    it("navigates multiple photos and falls back only when all have failed", () => {
+      const fixture = dom();
+      const input = media();
+      const second = {
+        ...input.coverImage!,
+        mediaId: "second",
+        providerReference: "/images/toca2.jpg",
+      };
+      fixture.parent.appendChild(
+        createPlaceDetailMedia(
+          fixture.document,
+          { ...input, gallery: [input.coverImage!, second] },
+          "place-toca",
+          "Toca",
+          "pt",
+        ) as unknown as ElementFixture,
+      );
+      const figure = fixture.parent.children[0]!;
+      const [, previous, next, counter, status, fallback] = figure.children as [
+        ElementFixture,
+        ElementFixture,
+        ElementFixture,
+        ElementFixture,
+        ElementFixture,
+        ElementFixture,
+      ];
+      expect(next.attributes["aria-label"]).toBe("Próxima foto");
+      expect(previous.attributes["aria-label"]).toBe("Foto anterior");
+      expect(counter.textContent).toBe("1 de 2");
+      next.listeners.get("click")!();
+      const secondImage = figure.children.find(
+        (node) => node.tagName === "img",
+      )!;
+      expect(secondImage.src).toBe("/images/toca2.jpg");
+      expect(counter.textContent).toBe("2 de 2");
+      Object.defineProperty(fixture.document, "activeElement", {
+        value: next,
+        configurable: true,
+      });
+      secondImage.listeners.get("error")!();
+      const returnedImage = figure.children.find(
+        (node) => node.tagName === "img",
+      )!;
+      expect(returnedImage.src).toBe("/images/toca.jpg");
+      expect(fallback.hidden).toBe(true);
+      expect(figure.focused).toBe(true);
+      expect(status.attributes.role).toBe("status");
+      expect(status.textContent).toBe("Uma foto não pôde ser carregada.");
+      returnedImage.listeners.get("error")!();
+      expect(figure.dataset.mediaState).toBe("missing");
+      expect(fallback.hidden).toBe(false);
+      expect(next.hidden).toBe(true);
+    });
+
+    it("counts only available photos after an image fails", () => {
+      const fixture = dom();
+      const input = media();
+      const second = {
+        ...input.coverImage!,
+        mediaId: "second",
+        providerReference: "/images/second.jpg",
+      };
+      const third = {
+        ...input.coverImage!,
+        mediaId: "third",
+        providerReference: "/images/third.jpg",
+      };
+      fixture.parent.appendChild(
+        createPlaceDetailMedia(
+          fixture.document,
+          { ...input, gallery: [second, third] },
+          "place-toca",
+          "Toca",
+          "pt",
+        ) as unknown as ElementFixture,
+      );
+      const [image, , next, counter] = fixture.parent.children[0]!.children;
+      image!.listeners.get("error")!();
+      expect(counter!.textContent).toBe("1 de 2");
+      next!.listeners.get("click")!();
+      expect(counter!.textContent).toBe("2 de 2");
     });
 
     it.each([
