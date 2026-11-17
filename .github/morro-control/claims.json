@@ -110,20 +110,6 @@
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-16T23:00:00.000Z"
     },
-    "MD-RESERVA-PRESENTATION-TEST-20261116": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "chore/reserva-test-claim-v2-20261116",
-      "baseSha": "cad73ee8fe5734c19fd2021e4dcd533f30625170",
-      "paths": [
-        "tooling/ticketing/browser-contract.test.mjs",
-        ".morro/changesets/MD-RESERVA-PRESENTATION-TEST-20261116.json"
-      ],
-      "domains": ["ticketing", "governance"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-17T19:30:00.000Z"
-    },
     "MD-AUTH-WARNING-COMPATIBILITY-20261117": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
