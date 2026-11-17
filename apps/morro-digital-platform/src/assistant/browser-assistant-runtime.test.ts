@@ -18,6 +18,8 @@ import {
   type AssistantDialogIntentHandler,
 } from "@touristic/assistant";
 import { createAssistantBrowserDomainHandlers } from "./assistant-domain-adapter.js";
+import { createAssistantNavigationAppHandlers } from "./assistant-navigation-adapter.js";
+import type { ExploreLocationsStateSnapshot } from "../map/explore-locations-control.js";
 import ts from "typescript";
 import { resolveExploreLocationCount } from "./assistant-contextual-state.js";
 import { assistantUiStateStatus } from "./assistant-ui-state.js";
@@ -434,17 +436,25 @@ describe("localized recovery at the real runtime controller boundary", () => {
   );
 });
 
-function deferredTurn() {
-  let resolve!: (response: AssistantDialogResponse) => void;
+function deferredTurn<Response = AssistantDialogResponse>() {
+  let resolve!: (response: Response) => void;
   let reject!: (error: Error) => void;
-  const promise = new Promise<AssistantDialogResponse>((yes, no) => {
+  const promise = new Promise<Response>((yes, no) => {
     resolve = yes;
     reject = no;
   });
   return { promise, resolve, reject };
 }
 
-function pendingAssistantFixture() {
+const navigationDestination = {
+  name: "Farol do Morro",
+  latitude: -13.38,
+  longitude: -38.914,
+};
+
+function pendingAssistantFixture(
+  initialExploreState: Partial<ExploreLocationsStateSnapshot> = {},
+) {
   const pending = deferredTurn();
   const handler = vi.fn<AssistantDialogIntentHandler>(() => pending.promise);
   const context = createAssistantContextManager();
@@ -474,10 +484,30 @@ function pendingAssistantFixture() {
     });
     return true;
   });
-  const exploreState = () => ({
+  let state: ExploreLocationsStateSnapshot = {
     stage: "detail",
     place: "Praia A",
     category: "beaches",
+    source: "canonical",
+    placeId: "place-a",
+    destinationId: "morro-de-sao-paulo",
+    markerCount: 1,
+    sheetState: null,
+    tour: null,
+    ...initialExploreState,
+  };
+  const exploreState = () => Object.freeze({ ...state });
+  const start = vi.fn<(destination: unknown) => Promise<void>>(async () => {});
+  const stop = vi.fn();
+  const navigationHandlers = createAssistantNavigationAppHandlers({
+    navigation: {
+      start: async (destination) => {
+        await start(destination);
+        return { type: "FeatureCollection", features: [] };
+      },
+      stop,
+    },
+    resolver: { resolveDestination: () => navigationDestination },
   });
   const dependencies = {
     document,
@@ -492,7 +522,7 @@ function pendingAssistantFixture() {
     profile: { recordInteraction: vi.fn() },
     domainHandlers: { help: handler },
     intelligenceHandlers: {},
-    navigationHandlers: {},
+    navigationHandlers,
     createAssistantLlmHandler: () => async () => null,
     messages: {
       append: (message: { sender: string; html: string }) => {
@@ -517,7 +547,6 @@ function pendingAssistantFixture() {
     presentationLanguage: () => "pt",
     voiceLanguage: () => "pt",
     voice,
-    syncExploreContext: () => undefined,
     readExploreState: exploreState,
     commerceCheckoutUrl: () => null,
     resolveAssistantV1ResidualCommand: () => null,
@@ -527,7 +556,6 @@ function pendingAssistantFixture() {
       value === "beaches"
         ? { type: "open_category", category: "beaches" }
         : null,
-    CONTROLLER_OWNED_AWAITING_TYPES: new Set(),
     clearAssistantDomOptions: vi.fn(),
     removePhotoPresentation: vi.fn(),
     readPlaceOwnedActionValues: () => [],
@@ -577,6 +605,8 @@ function pendingAssistantFixture() {
     "controller",
     "dropStaleResponse",
     "appendStandardMessage",
+    "CONTROLLER_OWNED_AWAITING_TYPES",
+    "syncExploreContext",
     "executeInputTurn",
     "processInputTurn",
     "processInput",
@@ -590,6 +620,7 @@ function pendingAssistantFixture() {
     "readRuntimeAction",
     "isUnknownArray",
     "readDeterministicExploreCommands",
+    "toProfileInterestCategory",
   ]
     .map(runtimeFunction)
     .join("\n");
@@ -598,13 +629,15 @@ function pendingAssistantFixture() {
   const compiled = ts.transpileModule(
     `
     let destroyed=false, requestGeneration=0, assistantUiGeneration=0, currentPresentation=null, legacyMenuRouting=false;
+    let profiledExploreCategory=null, profiledExplorePlace=null, syncedExploreSelection=null;
     const activeStage="detail", activePlaceLocation={name:"Praia A",category:"beaches"};
     const activePlaceActionValues=Object.freeze(["place-action:info:place-a"]);
     const activePlaceDetail={placeId:"place-a",location:activePlaceLocation,categoryLabel:"Praias",description:"Confirmed place A details",locale:"pt"};
     ${functions}
     ${declarations}
     ${detailConsumers.join("\n")}
-    return {process:(value,source="programmatic")=>processInput(value,undefined,false,source),controller,showDetails:()=>handlePlaceAction("place-action:info:place-a")};
+    syncExploreContext();
+    return {process:(value,source="programmatic")=>processInput(value,undefined,false,source),controller,sync:syncExploreContext,showDetails:()=>handlePlaceAction("place-action:info:place-a")};
   `,
     { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
   ).outputText;
@@ -619,6 +652,7 @@ function pendingAssistantFixture() {
       processUserInput(input: string): Promise<AssistantDialogResponse>;
     };
     showDetails(): void;
+    sync(): void;
   };
   return {
     ...create(...Object.values(dependencies)),
@@ -631,10 +665,157 @@ function pendingAssistantFixture() {
     voice,
     execute,
     events,
+    start,
+    stop,
+    setExploreState(update: Partial<ExploreLocationsStateSnapshot>) {
+      state = { ...state, ...update };
+    },
     details: () => details,
     renderedOptions: dependencies.renderAssistantDomOptions,
   };
 }
+
+describe("navigation confirmation through the actual runtime Explore synchronization", () => {
+  it.each(["menu", "detail", "filters", "places"] as const)(
+    "shares duplicate confirmations in %s without restoring the map selection while starting",
+    async (stage) => {
+      const gate = deferredTurn<void>();
+      const f = pendingAssistantFixture({ stage });
+      f.start.mockImplementationOnce(() => gate.promise);
+      expect(
+        (await f.process("me leve para Farol do Morro")).metadata,
+      ).toMatchObject({ navigation: "awaiting_confirmation" });
+      // A fresh immutable snapshot and presentation-only count changes are not a new choice.
+      f.setExploreState({ markerCount: 5, locationCount: 8 });
+      queueMicrotask(() => f.sync());
+      const first = f.process("sim");
+      await Promise.resolve();
+      f.sync();
+      const second = f.process("sim");
+      gate.resolve(undefined);
+      const responses = await Promise.all([first, second]);
+      expect(f.start).toHaveBeenCalledExactlyOnceWith({
+        latitude: navigationDestination.latitude,
+        longitude: navigationDestination.longitude,
+      });
+      expect(responses[1]?.metadata?.navigation).toBe("started");
+      expect(f.context.getContext()).toMatchObject({
+        awaiting: null,
+        pendingRoute: null,
+        selectedDestination: navigationDestination,
+      });
+      expect(f.stop).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["menu", "detail", "filters", "places"] as const)(
+    "restores only the current failed confirmation in %s and permits one retry",
+    async (stage) => {
+      const gate = deferredTurn<void>();
+      const f = pendingAssistantFixture({ stage });
+      f.start.mockImplementationOnce(() => gate.promise);
+      await f.process("me leve para Farol do Morro");
+      const first = f.process("sim");
+      await Promise.resolve();
+      f.sync();
+      const second = f.process("sim");
+      if (f.start.mock.calls.length) gate.reject(Error("route unavailable"));
+      else gate.resolve(undefined);
+      const responses = await Promise.all([first, second]);
+      expect(f.start).toHaveBeenCalledTimes(1);
+      expect(responses[1]?.metadata).toMatchObject({
+        domain: "assistant_runtime",
+        state: "error",
+      });
+      expect(f.context.getContext()).toMatchObject({
+        awaiting: { type: "confirmar_navegacao" },
+        pendingRoute: navigationDestination,
+      });
+      expect((await f.process("sim")).metadata?.navigation).toBe("started");
+      expect(f.start).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("keeps a textual destination distinct from the map when the same canonical place is relabeled", async () => {
+    const f = pendingAssistantFixture();
+    await f.process("me leve para Farol do Morro");
+    f.setExploreState({ place: "Beach A" });
+    f.sync();
+    expect(f.context.getContext().pendingRoute).toEqual(navigationDestination);
+    expect((await f.process("sim")).metadata?.navigation).toBe("started");
+    expect(f.start).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { stage: "menu", category: null, place: null, placeId: null },
+    { stage: "filters", category: "hotels", place: null, placeId: null },
+    { stage: "places", category: "hotels", place: null, placeId: null },
+    { placeId: "homonym-with-different-id" },
+    { destinationId: "another-destination" },
+    { source: "legacy", placeId: null, destinationId: null },
+  ] satisfies Partial<ExploreLocationsStateSnapshot>[])(
+    "invalidates an unconsumed confirmation after the new Explore selection %j",
+    async (selection) => {
+      const f = pendingAssistantFixture();
+      await f.process("me leve para Farol do Morro");
+      f.setExploreState(selection);
+      f.sync();
+      expect(f.context.getContext().pendingRoute).toBeNull();
+      expect((await f.process("sim")).metadata?.navigation).not.toBe("started");
+      expect(f.start).not.toHaveBeenCalled();
+      await f.process("me leve para Farol do Morro");
+      expect((await f.process("sim")).metadata?.navigation).toBe("started");
+      expect(f.start).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(["before dispatch", "late success", "late failure"])(
+    "does not revive a consumed confirmation after a new selection and %s",
+    async (outcome) => {
+      const gate = deferredTurn<void>();
+      const f = pendingAssistantFixture();
+      f.start.mockImplementationOnce(() => gate.promise);
+      await f.process("me leve para Farol do Morro");
+      const old = f.process("sim");
+      if (outcome !== "before dispatch") await Promise.resolve();
+      f.setExploreState({ placeId: "new-selection-with-same-name" });
+      f.sync();
+      const current = f.process("sim");
+      if (outcome === "late failure" && f.start.mock.calls.length)
+        gate.reject(Error("obsolete route"));
+      else gate.resolve(undefined);
+      const responses = await Promise.all([old, current]);
+      expect(responses[0]?.metadata?.state).toBe("superseded");
+      expect(responses[1]?.metadata?.navigation).not.toBe("started");
+      expect(f.start).toHaveBeenCalledTimes(
+        outcome === "before dispatch" ? 0 : 1,
+      );
+      expect(f.context.getContext()).toMatchObject({
+        awaiting: null,
+        pendingRoute: null,
+      });
+      expect(f.stop).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains explicit cancellation while an unchanged Explore snapshot is synchronized", async () => {
+    const gate = deferredTurn<void>();
+    const f = pendingAssistantFixture();
+    f.start.mockImplementationOnce(() => gate.promise);
+    await f.process("me leve para Farol do Morro");
+    const old = f.process("sim");
+    await Promise.resolve();
+    f.sync();
+    expect((await f.process("parar navegação")).metadata?.navigation).toBe(
+      "cancelled",
+    );
+    if (f.start.mock.calls.length) gate.reject(Error("cancelled route"));
+    else gate.resolve(undefined);
+    expect((await old).metadata?.state).toBe("superseded");
+    expect(f.stop).toHaveBeenCalledOnce();
+    expect(f.context.getContext().pendingRoute).toBeNull();
+  });
+});
 
 describe("pending assistant response and explicit place details", () => {
   it.each([
@@ -957,13 +1138,14 @@ visit(ast);
 if (!syncExpression || !categoryFunction)
   throw new Error("Actual runtime context functions missing");
 const body = ts.transpileModule(
-  `${categoryFunction}\nlet profiledExploreCategory = null; let profiledExplorePlace = null; return (${syncExpression});`,
+  `${categoryFunction}\nlet profiledExploreCategory = null; let profiledExplorePlace = null; let syncedExploreSelection = null; return (${syncExpression});`,
   { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
 ).outputText;
 const compose = compileFunction(body, [
   "readExploreState",
   "context",
   "profile",
+  "conversation",
 ]) as (...args: unknown[]) => (hint?: string) => void;
 
 function fixture() {
@@ -986,7 +1168,9 @@ function fixture() {
     category: string | null;
     tour: AssistantActiveTourContext | null;
   } = { stage: "menu", place: null, category: null, tour: null };
-  const sync = compose(() => state, context, profile);
+  const sync = compose(() => state, context, profile, {
+    issueSequence: vi.fn(),
+  });
   const step = (
     stage: string,
     place: string | null,

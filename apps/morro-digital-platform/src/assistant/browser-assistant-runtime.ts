@@ -7,6 +7,7 @@ import {
   createAssistantUserProfileManager,
   getAssistantMainMenu,
   normalizeAssistantVoiceLanguage,
+  type AssistantContext,
   type AssistantDialogIntentHandler,
   type AssistantDialogResponse,
   type AssistantInterestCategory,
@@ -933,53 +934,60 @@ export function installBrowserAssistantRuntime(
           },
         },
       });
-  const controller = {
-    processUserInput(
-      input: string,
-      isCurrent: () => boolean = () => true,
-    ): Promise<AssistantDialogResponse> {
-      // Bind writes to this request: a late handler must not replace the
-      // context or append history after a newer shared conversation action.
-      return createAssistantDialogController({
-        context: {
-          getContext: () => context.getContext(),
-          updateContext: (updates) => {
-            if (isCurrent()) context.updateContext(updates);
+  const controller = (() => {
+    const navigationCoordination = { generation: 0 };
+    return {
+      processUserInput(
+        input: string,
+        isCurrent: () => boolean = () => true,
+        sequence?: number,
+      ): Promise<AssistantDialogResponse> {
+        // Bind writes to this request: a late handler must not replace the
+        // context or append history after a newer shared conversation action.
+        return createAssistantDialogController({
+          navigationCoordination,
+          navigationRequestSequence: sequence,
+          isCurrent,
+          context: {
+            getContext: () => context.getContext(),
+            updateContext: (updates) => {
+              if (isCurrent()) context.updateContext(updates);
+            },
+            addToHistory: (entry) => {
+              if (isCurrent()) context.addToHistory(entry);
+            },
           },
-          addToHistory: (entry) => {
-            if (isCurrent()) context.addToHistory(entry);
-          },
-        },
-        profile,
-        handlers: Object.fromEntries(
-          Object.entries({
-            ...domainHandlers,
-            ...intelligenceHandlers,
-            ...navigationHandlers,
-          }).map(([intent, handler]) => [
-            intent,
-            handler ? withPresentationLanguage(handler) : undefined,
-          ]),
-        ),
-        llm: withPresentationLanguage(
-          createAssistantLlmHandler({
-            ...(options.fetch ? { fetch: options.fetch } : {}),
-          }),
-        ),
-        defaultResponse: () =>
-          assistantRecoveryResponse(
+          profile,
+          handlers: Object.fromEntries(
+            Object.entries({
+              ...domainHandlers,
+              ...intelligenceHandlers,
+              ...navigationHandlers,
+            }).map(([intent, handler]) => [
+              intent,
+              handler ? withPresentationLanguage(handler) : undefined,
+            ]),
+          ),
+          llm: withPresentationLanguage(
+            createAssistantLlmHandler({
+              ...(options.fetch ? { fetch: options.fetch } : {}),
+            }),
+          ),
+          defaultResponse: () =>
+            assistantRecoveryResponse(
+              normalizeAssistantVoiceLanguage(
+                options.document.documentElement.lang,
+              ),
+            ),
+          errorResponse: runtimeErrorResponse,
+          getPresentationLanguage: () =>
             normalizeAssistantVoiceLanguage(
               options.document.documentElement.lang,
             ),
-          ),
-        errorResponse: runtimeErrorResponse,
-        getPresentationLanguage: () =>
-          normalizeAssistantVoiceLanguage(
-            options.document.documentElement.lang,
-          ),
-      }).processUserInput(input);
-    },
-  };
+        }).processUserInput(input);
+      },
+    };
+  })();
 
   const view = options.document.defaultView;
   let navigationActive = false;
@@ -1127,6 +1135,7 @@ export function installBrowserAssistantRuntime(
   let legacyMenuRouting = false;
   let profiledExploreCategory: string | null = null;
   let profiledExplorePlace: string | null = null;
+  let syncedExploreSelection: string | null = null;
 
   const appendStandardMessage = (
     sender: "user" | "assistant",
@@ -1176,7 +1185,13 @@ export function installBrowserAssistantRuntime(
   const presentationLanguage = () =>
     normalizeAssistantVoiceLanguage(options.document.documentElement.lang);
 
-  const readExploreState = (): AssistantExploreStateSnapshot =>
+  const readExploreState = (): AssistantExploreStateSnapshot &
+    Partial<
+      Pick<
+        ExploreLocationsStateSnapshot,
+        "placeId" | "destinationId" | "source"
+      >
+    > =>
     options.explore?.getState() ?? readAssistantExploreState(options.document);
 
   const contextualMessaging = installAssistantContextualMessaging({
@@ -1196,9 +1211,34 @@ export function installBrowserAssistantRuntime(
 
   const syncExploreContext = (placeHint?: string): void => {
     const state = readExploreState();
+    const selectedPlace = placeHint ?? state.place;
+    const selection = JSON.stringify([
+      state.stage,
+      state.category,
+      state.source ?? null,
+      state.placeId
+        ? [state.destinationId ?? null, state.placeId]
+        : selectedPlace,
+      state.tour?.tourId ?? null,
+      state.tour?.stage ?? null,
+      state.tour?.currentStopIndex ?? null,
+    ]);
     context.updateContext({
       activeTour: state.stage === "tour" ? state.tour : null,
     });
+    // Re-reading the same selection must not replace a dialog-owned awaiting
+    // state, including a confirmation consumed by an in-flight navigation.
+    if (selection === syncedExploreSelection) return;
+    // A genuinely new choice invalidates pending continuations even when its
+    // visible label is unchanged or the contextual presenter deduplicates it.
+    if (syncedExploreSelection !== null) conversation.issueSequence();
+    const updates: Partial<AssistantContext> = {
+      awaiting: null,
+      pendingRoute: null,
+      ...(context.getContext().awaiting?.type === "confirmar_navegacao"
+        ? { selectedDestination: null }
+        : {}),
+    };
     const interestCategory = toProfileInterestCategory(state.category);
     if (interestCategory && state.category !== profiledExploreCategory) {
       profile.recordInteraction(
@@ -1207,7 +1247,6 @@ export function installBrowserAssistantRuntime(
       );
       profiledExploreCategory = state.category;
     }
-    const selectedPlace = placeHint ?? state.place;
     if (selectedPlace && selectedPlace !== profiledExplorePlace) {
       profile.recordInteraction(selectedPlace, interestCategory, {
         name: selectedPlace,
@@ -1216,7 +1255,7 @@ export function installBrowserAssistantRuntime(
       profiledExplorePlace = selectedPlace;
     }
     if (state.stage === "filters" && state.category) {
-      context.updateContext({
+      Object.assign(updates, {
         lastCategory: state.category,
         lastPlace: null,
         lastIntent: "categoria",
@@ -1225,10 +1264,8 @@ export function installBrowserAssistantRuntime(
           category: state.category,
         },
       });
-      return;
-    }
-    if (state.stage === "places" && state.category) {
-      context.updateContext({
+    } else if (state.stage === "places" && state.category) {
+      Object.assign(updates, {
         lastCategory: state.category,
         lastPlace: null,
         lastIntent: "categoria",
@@ -1237,39 +1274,32 @@ export function installBrowserAssistantRuntime(
           category: state.category,
         },
       });
-      return;
-    }
-    if (state.stage === "detail" && state.category) {
-      context.updateContext({
+    } else if (state.stage === "detail" && state.category) {
+      Object.assign(updates, {
         lastCategory: state.category,
         lastIntent: "detalhes",
-        awaiting: null,
         ...(selectedPlace ? { lastPlace: selectedPlace } : {}),
       });
-      return;
-    }
-    if (state.stage === "tour" && state.category) {
-      context.updateContext({
+    } else if (state.stage === "tour" && state.category) {
+      Object.assign(updates, {
         lastCategory: state.category,
         lastIntent: "tour",
-        awaiting: null,
       });
-      return;
-    }
-    // Native search exposes places without a category; the DOM adapter uses search.
-    if (
+    } else if (
       state.stage === "menu" ||
       state.stage === "search" ||
       (state.stage === "places" && !state.category)
     ) {
+      // Native search exposes places without a category; the DOM adapter uses search.
       profiledExploreCategory = null;
       profiledExplorePlace = null;
-      context.updateContext({
+      Object.assign(updates, {
         lastPlace: null,
         lastCategory: state.category ?? null,
-        awaiting: null,
       });
     }
+    context.updateContext(updates);
+    syncedExploreSelection = selection;
   };
 
   const executeInputTurn = async (
@@ -1588,7 +1618,11 @@ export function installBrowserAssistantRuntime(
       conversation.isCurrentSequence(sequence);
     let response: AssistantDialogResponse;
     try {
-      response = await controller.processUserInput(value, isCurrentResponse);
+      response = await controller.processUserInput(
+        value,
+        isCurrentResponse,
+        sequence,
+      );
     } catch (error) {
       if (!isCurrentResponse()) return dropStaleResponse();
       throw error;
