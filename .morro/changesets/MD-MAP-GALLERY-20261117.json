@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "MD-MAP-GALLERY-20261117",
   "objective": "preserve-map-selection-context-and-show-published-place-photo-gallery",
-  "baseSha": "0af89dbb2bb5a85de7bc1ac8bdb91e472245ce08",
+  "baseSha": "9a68580ec36fca7525ed15a88f108c4b2a442c3a",
   "branch": "chore/acquire-map-gallery-20261117",
   "state": "IMPLEMENTING",
   "risk": "high",
