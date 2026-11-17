@@ -27,7 +27,7 @@
     "merged": false,
     "localDifferences": "Track quoted stars and separators, preserve nested extglob compatibility, and literalize non-reducible bare-star branches."
   },
-  "patchSha256": "18bee63cc30aa7d35d58267ba261feaac8f083a866fecafb84ce06c48f517c52",
+  "patchSha256": "ec7820e8d6a431fb609945c1c373b57ff1e3e2bf479b940866b2ad36cc9343a7",
   "fixedParserSha256": "81311ce344805ec8647fab7853b62885be5f482625e57908a0eecb8e4c2b4ee2",
-  "forkArchiveSha256": "c03361c435e831765491da9dd2e53310feb5211e9541e43a01c8729518b02006"
+  "forkArchiveSha256": "cc9a8d3c33256c8d2760340d180eb43abd5e8e9a169f7cdf28e0416dabdcc82b"
 }

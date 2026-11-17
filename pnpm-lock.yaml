@@ -938,7 +938,7 @@ packages:
   "@tdp/picomatch-secure@file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz":
     resolution:
       {
-        integrity: sha512-Z3qld8x51qUy3b8AVcewZWV8Rz3KJieaKgN7wIeu8AJ+eU+PeR8mVNGffuyxrnWFVPeInVqKBL0usFjnUZmPCA==,
+        integrity: sha512-83L/wBmnr0L+6YYKgoIvEO3fw2wbTJq98rd6YouHd7PEgKyki32j9JVYNCYOJDdT7xTWRQcc6QMbZEQK62nzvQ==,
         tarball: file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz,
       }
     version: 4.0.7

@@ -1,9 +1,6 @@
 --- a/lib/parse.js
 +++ b/lib/parse.js
-@@ -270,6 +270,50 @@
-   return chars;
- };
- 
+@@ -272,0 +273,44 @@
 +// Single-branch star globs absorb repetition. Keep path separators, nested
 +// constructs and quoted literal stars out of that rewrite; ambiguous forms
 +// retain the parser's existing literal fallback for risky repeated extglobs.
@@ -48,13 +45,7 @@
 +  return { star, simple: simple && !escaped && !bracket && !quoted };
 +};
 +
- const repeatedExtglobRecursion = pattern => {
-   let depth = 0;
-   let value = pattern.trim();
-@@ -341,6 +385,13 @@
-     return combinable
-       ? { risky: true, safeOutput: buildCharClassStar([...new Set(safeChars)]) }
-       : { risky: true };
+@@ -343,0 +388,7 @@
 +  }
 +
 +  if (branches.length === 1) {
@@ -62,17 +53,8 @@
 +    if (branch.star) {
 +      return branch.simple ? { risky: false, collapse: true } : { risky: true };
 +    }
-   }
- 
-   return { risky: false };
-@@ -565,6 +616,10 @@
-       return;
-     }
- 
+@@ -567,0 +619,4 @@
 +    if (analysis.collapse === true && (token.type === 'plus' || token.type === 'star')) {
 +      token.close = token.type === 'plus' ? ')' : ')?';
 +    }
 +
-     let output = token.close + (opts.capture ? ')' : '');
-     let rest;
- 
