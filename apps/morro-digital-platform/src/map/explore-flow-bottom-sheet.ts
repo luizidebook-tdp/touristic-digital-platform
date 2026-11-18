@@ -497,10 +497,10 @@ export function installExploreFlowBottomSheet({
       if (destroyed) return;
       // The place card already lives inside the styled assistant dock. Keep its
       // original nodes (including gallery listeners and position) for Back.
-      hide();
       if (!reading.card.isConnected) return;
       const article = createPublishedPlaceReading(document, reading);
       if (!article) return;
+      hide();
       const card = reading.card;
       const previous = Array.from(card.childNodes);
       const back = document.createElement("button");
@@ -511,6 +511,7 @@ export function installExploreFlowBottomSheet({
       card.replaceChildren(article);
       const restore = (): boolean => {
         if (
+          !card.isConnected ||
           card.firstChild !== article ||
           card.dataset.placeId !== reading.placeId
         )

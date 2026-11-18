@@ -236,6 +236,16 @@ describe("published place reading on the Explore sheet", () => {
     expect(f.body.descendants("article")).toHaveLength(0);
     expect(f.renderMedia).not.toHaveBeenCalled();
   });
+  it("ignores a stale open while the current reading is visible", () => {
+    const f = fixture();
+    f.show();
+    const current = f.card.firstChild;
+    f.show(publication(), "another-place");
+    expect(f.card.firstChild).toBe(current);
+    f.card.isConnected = false;
+    current!.descendants("button")[0]!.dispatchEvent(new Event("click"));
+    expect(f.returnFocus.focus).not.toHaveBeenCalled();
+  });
   it("does not restore an old reading over a replacement selection", () => {
     const f = fixture();
     f.show();
