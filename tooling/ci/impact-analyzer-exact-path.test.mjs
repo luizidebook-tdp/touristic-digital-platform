@@ -330,7 +330,42 @@ for (const [path, domain, risk, db] of [
   });
 
 import { execFileSync } from "node:child_process";
-test("catalog impact additions preserve all prior rules and coverage", () => {
+const ownerBusinessPaths = [
+  "apps/morro-digital-platform/src/morro-pro-business-management.ts",
+  "apps/morro-digital-platform/src/morro-pro-business-management.test.ts",
+];
+
+test("owner business management paths inherit the existing business gates exactly", () => {
+  const reference = analyzeFiles([
+    "apps/morro-digital-platform/src/business-dashboard-client.ts",
+  ]);
+  assert.deepEqual(reference.domains, ["business"]);
+  assert.equal(reference.classificationBlocked, false);
+  assert.equal(reference.needsFullSecurity, true);
+  for (const path of ownerBusinessPaths) {
+    assert.deepEqual(
+      analyzeFiles([path]),
+      { ...reference, files: [path] },
+      path,
+    );
+    for (const alias of nearCollisions(path)) {
+      const rejected = analyzeFiles([alias]);
+      assert.equal(rejected.classificationBlocked, true, alias);
+      assert.deepEqual(rejected.unknownFiles, [alias]);
+    }
+  }
+});
+
+test("affiliate portal markup stays blocked until its browser proof is routed", () => {
+  const page = "apps/morro-digital-platform/public/affiliate-portal.html";
+  for (const files of [[page], [...ownerBusinessPaths, page]]) {
+    const report = analyzeFiles(files);
+    assert.equal(report.classificationBlocked, true);
+    assert.deepEqual(report.unknownFiles, [page]);
+  }
+});
+
+test("catalog and owner panel impact additions preserve all prior rules and coverage", () => {
   const before = JSON.parse(
     execFileSync(
       "git",
@@ -348,6 +383,7 @@ test("catalog impact additions preserve all prior rules and coverage", () => {
     ),
   );
   const additions = {
+    business: ownerBusinessPaths,
     "explore-marker-rendering": [
       "apps/morro-digital-platform/src/map/public-place-catalog-presentation.ts",
     ],
