@@ -1,6 +1,5 @@
 import type { AssistantLocale } from "@touristic/assistant";
 import type { PublicPlaceDetail } from "@touristic/business";
-import { publicPlaceCatalogText } from "./public-place-catalog-presentation.js";
 import { createFeatureStyleGate } from "./feature-styles.js";
 export type ExploreFlowBottomSheetState = "peek" | "half" | "full";
 export type ExploreFlowBottomSheetKind = "explore" | "tour";
@@ -20,6 +19,21 @@ export interface PublishedPlaceReading {
     locale: AssistantLocale,
   ) => HTMLElement;
   readonly card: HTMLElement;
+  /** The active controller keeps Close available across the place and its actions. */
+  readonly close?: HTMLElement;
+  readonly categoryLabel?: string;
+  /** The controller supplies its actual, already-bound actions for this selection. */
+  readonly actions: HTMLElement;
+}
+
+export interface PublishedPlaceActionReading {
+  readonly placeId: string;
+  readonly revisionId: string;
+  /** Pure presentation from the active publication, including subsequent locale changes. */
+  readonly content: (
+    detail: PublicPlaceDetail,
+    locale: AssistantLocale,
+  ) => Readonly<{ title: string; text: string }> | null;
   readonly returnFocus: HTMLElement;
 }
 
@@ -36,7 +50,9 @@ export interface ExploreFlowBottomSheetPresentation {
 
 export interface ExploreFlowBottomSheetController {
   show(presentation: ExploreFlowBottomSheetPresentation): void;
-  showPlace(reading: PublishedPlaceReading): void;
+  showPlace(reading: PublishedPlaceReading): boolean;
+  showPlaceAction(action: PublishedPlaceActionReading): boolean;
+  backToPlace(): boolean;
   hide(): void;
   setState(state: ExploreFlowBottomSheetState): void;
   getState(): ExploreFlowBottomSheetState;
@@ -166,82 +182,73 @@ function createStepButton(
   return button;
 }
 
-/** Build a read-only detail from the single publication already accepted for the map selection. */
+function samePlacePresentation(
+  previous: PublishedPlaceReading,
+  next: PublishedPlaceReading,
+): boolean {
+  // A publication revision fixes the profile and media; locale and partial readiness affect their display.
+  return (
+    previous.locale === next.locale &&
+    previous.categoryLabel === next.categoryLabel &&
+    previous.actions === next.actions &&
+    previous.detail.profile.name === next.detail.profile.name &&
+    previous.detail.profile.description === next.detail.profile.description &&
+    previous.detail.profile.shortDescription ===
+      next.detail.profile.shortDescription &&
+    previous.detail.partial.media === next.detail.partial.media &&
+    previous.detail.media?.placeId === next.detail.media?.placeId
+  );
+}
+
 function createPublishedPlaceReading(
   document: Document,
   reading: PublishedPlaceReading,
-): HTMLElement | null {
-  const { placeId, detail, locale, renderMedia } = reading;
-  if (
-    !placeId ||
-    reading.card.dataset.placeId !== placeId ||
-    detail.profile.id !== placeId ||
-    detail.actions.placeId !== placeId ||
-    detail.actions.destinationId !== detail.profile.destinationId ||
-    !detail.revision.id ||
-    !Number.isSafeInteger(detail.revision.number) ||
-    detail.revision.number < 1
-  ) {
-    return null;
-  }
-  const content = document.createElement("article");
-  content.dataset.placeId = placeId;
-  content.dataset.publicationRevision = detail.revision.id;
-  content.dataset.placeDetailVisual = "true";
+): HTMLElement {
+  const { placeId, detail, locale } = reading;
+  const article = document.createElement("article");
+  article.dataset.placeId = placeId;
+  article.dataset.publicationRevision = detail.revision.id;
+  article.dataset.placeDetailVisual = "true";
   const heading = document.createElement("h2");
   heading.className = "md-assistant-place-detail-title";
   heading.textContent = detail.profile.name;
-  content.append(heading);
+  article.append(heading);
   const media =
     detail.partial.media === "ready" && detail.media?.placeId === placeId
       ? detail.media
       : null;
-  content.append(
-    renderMedia(document, media, placeId, detail.profile.name, locale),
+  article.append(
+    reading.renderMedia(document, media, placeId, detail.profile.name, locale),
   );
+  if (reading.categoryLabel) {
+    const category = document.createElement("span");
+    category.className = "md-assistant-place-detail-meta";
+    category.textContent = reading.categoryLabel;
+    article.append(category);
+  }
   const description =
     detail.profile.description?.trim() ||
     detail.profile.shortDescription?.trim();
   if (description) {
     const body = document.createElement("p");
+    body.className = "md-assistant-place-detail-description";
     body.textContent = description;
-    content.append(body);
+    article.append(body);
   }
+  article.append(reading.actions);
+  return article;
+}
 
-  // Browsing a catalog is local presentation. Only expose the published read action.
-  const offerAction = [
-    detail.actions.primaryAction,
-    ...detail.actions.secondaryActions,
-  ].find(
-    (action) =>
-      action?.id === "offers" &&
-      action.value === `place-action:offers:${placeId}` &&
-      !action.disabled &&
-      action.availability === "available",
-  );
-  if (
-    offerAction &&
-    detail.partial.actions === "ready" &&
-    detail.partial.commerce === "ready" &&
-    detail.commerce?.offers.length
-  ) {
-    const offers = document.createElement("details");
-    const label = document.createElement("summary");
-    label.textContent = offerAction.label;
-    offers.append(label);
-    const lines = publicPlaceCatalogText(
-      "offers",
-      detail.commerce,
-      locale,
-    ).split("\n");
-    for (const line of lines) {
-      const paragraph = document.createElement("p");
-      paragraph.textContent = line;
-      offers.append(paragraph);
-    }
-    content.append(offers);
+function showPublishedPlaceView(
+  { card, close }: PublishedPlaceReading,
+  article: HTMLElement,
+): void {
+  if (close && card.firstChild !== close)
+    card.insertBefore(close, card.firstChild);
+  for (const child of Array.from(card.childNodes)) {
+    if (child !== close && child !== article) child.remove();
   }
-  return content;
+  if (article.parentNode !== card) card.append(article);
 }
 
 export function installExploreFlowBottomSheet({
@@ -419,15 +426,93 @@ export function installExploreFlowBottomSheet({
     setState(state);
   };
 
-  let restorePlaceCard: (() => boolean) | undefined;
-  const closePlace = (): boolean => {
-    const restore = restorePlaceCard;
-    restorePlaceCard = undefined;
-    return restore?.() ?? false;
+  let place:
+    | {
+        reading: PublishedPlaceReading;
+        article: HTMLElement;
+        actionHome: { parent: Node; next: ChildNode | null } | null;
+      }
+    | undefined;
+  let actionView:
+    | {
+        article: HTMLElement;
+        returnFocus: HTMLElement;
+        refresh: (reading: PublishedPlaceReading) => boolean;
+      }
+    | undefined;
+
+  const currentPlaceCard = (): boolean => {
+    if (!place) return false;
+    const { card, close, placeId, detail } = place.reading;
+    const article = actionView?.article ?? place.article;
+    return (
+      card.isConnected &&
+      card.dataset.placeId === placeId &&
+      card.dataset.publicationRevision === detail.revision.id &&
+      (close
+        ? card.firstChild === close && close.nextSibling === article
+        : card.firstChild === article)
+    );
+  };
+
+  const currentControl = (
+    actions: HTMLElement,
+    previous: HTMLElement,
+  ): HTMLElement | undefined => {
+    if (
+      actions.contains(previous) &&
+      !(previous instanceof HTMLButtonElement && previous.disabled)
+    )
+      return previous;
+    const value = previous.dataset.value;
+    return value
+      ? Array.from(
+          actions.querySelectorAll<HTMLButtonElement>("button[data-value]"),
+        ).find((button) => !button.disabled && button.dataset.value === value)
+      : undefined;
+  };
+
+  const backToPlace = (): boolean => {
+    if (!place || !actionView || !currentPlaceCard()) return false;
+    const { returnFocus } = actionView;
+    actionView = undefined;
+    showPublishedPlaceView(place.reading, place.article);
+    (
+      currentControl(place.reading.actions, returnFocus) ?? place.reading.card
+    ).focus({
+      preventScroll: true,
+    });
+    return true;
+  };
+
+  const restoreActionHome = (): void => {
+    if (!place) return;
+    const { reading, article, actionHome } = place;
+    if (actionHome && article.contains(reading.actions)) {
+      const { parent, next } = actionHome;
+      parent.insertBefore(
+        reading.actions,
+        next?.parentNode === parent ? next : null,
+      );
+    }
+  };
+
+  const releasePlace = (): void => {
+    if (!place) return;
+    const { reading } = place;
+    const ownsCard = currentPlaceCard();
+    restoreActionHome();
+    if (ownsCard) {
+      reading.card.replaceChildren();
+      delete reading.card.dataset.publishedPlaceCard;
+      delete reading.card.dataset.publicationRevision;
+    }
+    place = undefined;
+    actionView = undefined;
   };
 
   const render = (presentation: ExploreFlowBottomSheetPresentation): void => {
-    closePlace();
+    releasePlace();
     dismissHandler = presentation.onDismiss;
     clearCompatibilityMessageSource();
     compatibilityMessageSource = presentation.messageSource;
@@ -481,7 +566,7 @@ export function installExploreFlowBottomSheet({
     sheet.classList.add("hidden");
     sheet.setAttribute("aria-hidden", "true");
     delete sheet.dataset.flowKind;
-    closePlace();
+    releasePlace();
   };
 
   close.addEventListener("click", () => dismissHandler?.());
@@ -493,51 +578,148 @@ export function installExploreFlowBottomSheet({
         if (!destroyed) render(presentation);
       });
     },
-    showPlace(reading: PublishedPlaceReading): void {
-      if (destroyed) return;
-      // The place card already lives inside the styled assistant dock. Keep its
-      // original nodes (including gallery listeners and position) for Back.
-      if (!reading.card.isConnected) return;
-      const article = createPublishedPlaceReading(document, reading);
-      if (!article) return;
-      hide();
-      const card = reading.card;
-      const previous = Array.from(card.childNodes);
+    showPlace(reading: PublishedPlaceReading): boolean {
+      const { card, placeId, detail } = reading;
+      if (
+        destroyed ||
+        !card.isConnected ||
+        !placeId ||
+        card.dataset.placeId !== placeId ||
+        detail.profile.id !== placeId ||
+        detail.actions.placeId !== placeId ||
+        typeof detail.profile.destinationId !== "string" ||
+        !detail.profile.destinationId.trim() ||
+        detail.actions.destinationId !== detail.profile.destinationId ||
+        !detail.revision.id.trim() ||
+        !Number.isSafeInteger(detail.revision.number) ||
+        detail.revision.number < 1
+      )
+        return false;
+      if (place?.reading.card === card && place.reading.placeId === placeId) {
+        const previous = place.reading.detail.revision;
+        if (
+          detail.revision.number < previous.number ||
+          (detail.revision.number === previous.number) !==
+            (detail.revision.id === previous.id)
+        )
+          return false;
+      }
+      const previous = place?.reading;
+      const samePublication =
+        !!previous &&
+        previous.card === card &&
+        previous.placeId === placeId &&
+        previous.detail.revision.id === detail.revision.id &&
+        currentPlaceCard();
+      // A generic card can receive restored focus without adding another tab stop.
+      if (card.tabIndex < 0) card.tabIndex = -1;
+      const focused = document.activeElement as HTMLElement | null;
+      const hadFocus = !!focused && card.contains(focused);
+      if (
+        samePublication &&
+        place &&
+        samePlacePresentation(place.reading, reading)
+      ) {
+        place.reading = reading;
+      } else {
+        const keepActionHome =
+          samePublication && previous?.actions === reading.actions;
+        const oldHome = keepActionHome ? place?.actionHome : undefined;
+        if (!samePublication) hide();
+        else if (!keepActionHome) restoreActionHome();
+        const actionParent = reading.actions.parentNode;
+        const actionHome =
+          oldHome !== undefined
+            ? oldHome
+            : actionParent && !card.contains(actionParent)
+              ? { parent: actionParent, next: reading.actions.nextSibling }
+              : null;
+        const article = createPublishedPlaceReading(document, reading);
+        place = { reading, article, actionHome };
+        card.dataset.publishedPlaceCard = "true";
+        card.dataset.publicationRevision = detail.revision.id;
+      }
+      if (actionView && !actionView.refresh(reading)) actionView = undefined;
+      showPublishedPlaceView(reading, actionView?.article ?? place.article);
+      if (
+        hadFocus &&
+        focused &&
+        (!card.contains(focused) || document.activeElement !== focused)
+      ) {
+        const control =
+          focused === previous?.close || focused === reading.close
+            ? reading.close
+            : currentControl(reading.actions, focused);
+        (control ?? card).focus({ preventScroll: true });
+      }
+      return true;
+    },
+    showPlaceAction(action: PublishedPlaceActionReading): boolean {
+      if (
+        !place ||
+        actionView ||
+        !currentPlaceCard() ||
+        action.placeId !== place.reading.placeId ||
+        action.revisionId !== place.reading.detail.revision.id ||
+        !place.reading.actions.contains(action.returnFocus)
+      )
+        return false;
+      const article = document.createElement("article");
+      article.dataset.placeId = action.placeId;
+      article.dataset.publicationRevision = action.revisionId;
+      const heading = document.createElement("h2");
+      heading.className = "md-assistant-place-detail-title";
+      const body = document.createElement("div");
       const back = document.createElement("button");
       back.type = "button";
       back.className = "md-button md-button--secondary";
-      back.textContent = currentCopy(document).backToPlace;
-      article.append(back);
-      card.replaceChildren(article);
-      const restore = (): boolean => {
-        if (
-          !card.isConnected ||
-          card.firstChild !== article ||
-          card.dataset.placeId !== reading.placeId
-        )
-          return false;
-        card.replaceChildren(...previous);
-        return true;
+      article.append(heading, body, back);
+      let displayedText: string | undefined;
+      const view = {
+        article,
+        returnFocus: action.returnFocus,
+        refresh(reading: PublishedPlaceReading): boolean {
+          const control = currentControl(reading.actions, view.returnFocus);
+          const presentation =
+            control && action.content(reading.detail, reading.locale);
+          if (!control || !presentation) return false;
+          view.returnFocus = control;
+          if (heading.textContent !== presentation.title)
+            heading.textContent = presentation.title;
+          if (displayedText !== presentation.text) {
+            displayedText = presentation.text;
+            body.replaceChildren(
+              ...presentation.text
+                .split("\n")
+                .filter(Boolean)
+                .map((line) => {
+                  const paragraph = document.createElement("p");
+                  paragraph.textContent = line;
+                  return paragraph;
+                }),
+            );
+          }
+          const label = copyByLanguage[reading.locale]!.backToPlace;
+          if (back.textContent !== label) back.textContent = label;
+          return true;
+        },
       };
-      restorePlaceCard = restore;
-      const goBack = (): void => {
-        if (
-          restorePlaceCard === restore &&
-          closePlace() &&
-          reading.returnFocus.isConnected
-        ) {
-          reading.returnFocus.focus({ preventScroll: true });
-        }
-      };
-      back.addEventListener("click", goBack);
+      if (!view.refresh(place.reading)) return false;
+      const returnFromAction = (): boolean =>
+        actionView?.article === article && backToPlace();
+      back.addEventListener("click", returnFromAction);
       article.addEventListener("keydown", (event) => {
-        if (event.key !== "Escape") return;
-        event.preventDefault();
-        event.stopPropagation();
-        goBack();
+        if (event.key === "Escape" && returnFromAction()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
       });
+      actionView = view;
+      showPublishedPlaceView(place.reading, article);
       back.focus({ preventScroll: true });
+      return true;
     },
+    backToPlace,
     hide,
     setState,
     getState(): ExploreFlowBottomSheetState {
@@ -547,7 +729,7 @@ export function installExploreFlowBottomSheet({
     destroy(): void {
       featureStyles.cancel();
       if (destroyed) return;
-      closePlace();
+      releasePlace();
       clearCompatibilityMessageSource();
       destroyed = true;
       dismissHandler = undefined;

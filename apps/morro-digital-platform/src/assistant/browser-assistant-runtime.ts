@@ -1991,6 +1991,16 @@ export function installBrowserAssistantRuntime(
     else delete canonicalMessage.dataset.contextualCta;
     canonicalMessage.dataset.contextualVoiceCopy = voiceCopy;
 
+    const contextualCopySelector = ":scope > .md-assistant-contextual-copy";
+    if (
+      contextualState === "place_selected" &&
+      canonicalMessage.dataset.publishedPlaceCard === "true" &&
+      canonicalMessage.dataset.placeId?.trim()
+    ) {
+      canonicalMessage.querySelector(contextualCopySelector)?.remove();
+      return;
+    }
+
     const isPlainCategoryFlow =
       canonicalMessage.dataset.messageType === "category-flow" &&
       canonicalMessage.dataset.preserveContent !== "true";
@@ -2003,7 +2013,7 @@ export function installBrowserAssistantRuntime(
     // copy is projected as a bounded submessage inside the existing presenter
     // instead of creating a competing assistant message node.
     let contextualCopy = canonicalMessage.querySelector<HTMLElement>(
-      ":scope > .md-assistant-contextual-copy",
+      contextualCopySelector,
     );
     if (!contextualCopy) {
       contextualCopy = options.document.createElement("span");

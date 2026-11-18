@@ -19,7 +19,16 @@ import {
 } from "@touristic/assistant";
 import { createAssistantBrowserDomainHandlers } from "./assistant-domain-adapter.js";
 import ts from "typescript";
-import { resolveExploreLocationCount } from "./assistant-contextual-state.js";
+import {
+  normalizeAssistantContextualLanguage,
+  resolveAssistantContextualCategoryLabel,
+  resolveAssistantContextualCopy,
+  resolveExploreContextualState,
+  resolveExploreLocationCount,
+} from "./assistant-contextual-state.js";
+import { evaluateConversationPolicy } from "./assistant-conversation-policy.js";
+import { composeConversationResponse } from "./assistant-conversation-response-composer.js";
+import { composeConversationVoice } from "./assistant-conversation-voice-composer.js";
 import { assistantUiStateStatus } from "./assistant-ui-state.js";
 import {
   getAssistantConversationOrchestrator,
@@ -1080,7 +1089,114 @@ describe("actual browser runtime Explore context transitions", () => {
   });
 });
 
-describe("actual runtime contextual copy uses canonical location counts", () => {
+describe("Explore contextual messages in the canonical presenter", () => {
+  const source = `(${runtimeClosure("syncExploreContextualMessage")})();`;
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+  function syncMessage(parameters: Record<string, unknown>): void {
+    const run = compileFunction(compiled, Object.keys(parameters)) as (
+      ...values: unknown[]
+    ) => void;
+    run(...Object.values(parameters));
+  }
+
+  it("preserves the turn, voice and action when a published card replaces the legacy detail", () => {
+    let place = "Primeira Praia";
+    let stage = "detail";
+    const contextualCopy = {
+      className: "",
+      textContent: "",
+      remove: () => {
+        child = null;
+      },
+    };
+    let child: typeof contextualCopy | null = null;
+    class Message {
+      dataset: Record<string, string> = {
+        messageType: "place-detail",
+        placeId: "primeira-praia",
+        placeDetailVisual: "true",
+      };
+      textContent = "Descrição publicada da praia";
+      querySelector(selector: string) {
+        return selector === ":scope > .md-assistant-contextual-copy"
+          ? child
+          : null;
+      }
+      appendChild(element: typeof contextualCopy) {
+        child = element;
+      }
+    }
+    const message = new Message();
+    const document = {
+      documentElement: { lang: "pt-BR" },
+      getElementById: (id: string) =>
+        id === "assistant-category-results-message" ? message : null,
+      createElement: vi.fn(() => contextualCopy),
+    };
+    const conversation = getAssistantConversationOrchestrator(
+      document as unknown as Document,
+    );
+    const sync = () =>
+      syncMessage({
+        readExploreState: () => ({
+          stage,
+          category: "beaches",
+          place,
+          markerCount: 1,
+        }),
+        options: { document },
+        HTMLElement: Message,
+        conversation,
+        evaluateConversationPolicy,
+        composeConversationResponse,
+        composeConversationVoice,
+        normalizeAssistantContextualLanguage,
+        resolveAssistantContextualCategoryLabel,
+        resolveAssistantContextualCopy,
+        resolveExploreContextualState,
+        resolveExploreLocationCount,
+      });
+
+    sync();
+    expect(child).toBe(contextualCopy);
+    expect(contextualCopy.textContent).toContain(place);
+    const legacyTurn = message.dataset.conversationTurnId;
+
+    place = "Praia do Encanto";
+    message.dataset.placeId = "praia-do-encanto";
+    message.dataset.publishedPlaceCard = "true";
+    sync();
+    expect(child).toBeNull();
+    sync();
+    expect(document.createElement).toHaveBeenCalledTimes(1);
+    expect(message.textContent).toBe("Descrição publicada da praia");
+    const turn = conversation.recentTurns().at(-1);
+    expect(turn?.cause).toBe("place_selected");
+    expect(turn?.renderedText).toContain(place);
+    expect(turn?.voiceText).toContain(place);
+    expect(turn?.id).not.toBe(legacyTurn);
+    expect(message.dataset).toMatchObject({
+      conversationTurnId: turn?.id,
+      previousConversationTurnId: legacyTurn,
+      contextualVoiceCopy: turn?.voiceText,
+      contextualCta: "Ver ações",
+    });
+
+    delete message.dataset.placeId;
+    sync();
+    expect(child).toBe(contextualCopy);
+    message.dataset.placeId = "praia-do-encanto";
+    stage = "tour";
+    sync();
+    expect(contextualCopy.textContent).toBe(
+      conversation.recentTurns().at(-1)?.renderedText,
+    );
+    expect(message.dataset.contextualState).toBe("action_available");
+  });
+
   it.each([
     { markerCount: 2, locationCount: 9, expected: 9 },
     { markerCount: 8, locationCount: 0, expected: 0 },
@@ -1093,18 +1209,6 @@ describe("actual runtime contextual copy uses canonical location counts", () => 
   ])(
     "separates semantic count from symbols for $expected locations",
     (snapshot) => {
-      let expression = "";
-      function find(node: ts.Node): void {
-        if (
-          ts.isVariableDeclaration(node) &&
-          node.name.getText(ast) === "syncExploreContextualMessage"
-        )
-          expression = node.initializer?.getText(ast) ?? "";
-        ts.forEachChild(node, find);
-      }
-      find(ast);
-      if (!expression)
-        throw new Error("Actual runtime contextual closure missing");
       const seen: Array<number | null> = [];
       class Message {
         dataset: Record<string, string> = { messageType: "category-flow" };
@@ -1167,14 +1271,7 @@ describe("actual runtime contextual copy uses canonical location counts", () => 
           return "locations";
         },
       };
-      const compiled = ts.transpileModule(`return (${expression});`, {
-        compilerOptions: { target: ts.ScriptTarget.ES2022 },
-      }).outputText;
-      const createSync = compileFunction(compiled, Object.keys(parameters)) as (
-        ...values: unknown[]
-      ) => () => void;
-      const run = createSync(...Object.values(parameters));
-      run();
+      syncMessage(parameters);
       expect(seen).toEqual(Array(4).fill(snapshot.expected));
       expect(message.textContent).toBe(
         snapshot.expected === null

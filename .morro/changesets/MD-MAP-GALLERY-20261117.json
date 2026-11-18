@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-MAP-GALLERY-20261117",
   "objective": "preserve-map-selection-context-and-show-published-place-photo-gallery",
-  "baseSha": "9a68580ec36fca7525ed15a88f108c4b2a442c3a",
-  "branch": "chore/acquire-map-gallery-20261117",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "8628a9c270512c5de58d8b7ae48a9a52d5926323",
+  "branch": "chore/retire-merged-map-gallery-20261118",
+  "state": "MERGED",
   "risk": "high",
   "scope": "DESTINATION:MORRO",
   "owns": {

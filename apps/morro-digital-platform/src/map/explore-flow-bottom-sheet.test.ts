@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PublicPlaceDetail } from "@touristic/business";
 import { asCategoryId, asPlaceId } from "@touristic/business";
+import { publicPlaceCatalogText } from "./public-place-catalog-presentation.js";
 import {
   installExploreFlowBottomSheet,
   type PublishedPlaceReading,
@@ -25,21 +26,69 @@ class ElementStub extends EventTarget {
     toggle: (name: string, on: boolean) =>
       on ? this.classes.add(name) : this.classes.delete(name),
   };
-  isConnected = true;
+  parentNode: ElementStub | null = null;
+  get isConnected(): boolean {
+    return this.tagName === "body" || !!this.parentNode?.isConnected;
+  }
+  get nextSibling(): ElementStub | null {
+    const siblings = this.parentNode?.children;
+    return siblings?.[siblings.indexOf(this) + 1] ?? null;
+  }
+  contains(node: ElementStub): boolean {
+    return this === node || this.children.some((child) => child.contains(node));
+  }
+  remove() {
+    if (ElementStub.focused && this.contains(ElementStub.focused))
+      ElementStub.focused = null;
+    const siblings = this.parentNode?.children;
+    if (siblings) siblings.splice(siblings.indexOf(this), 1);
+    this.parentNode = null;
+  }
+  insertBefore(child: ElementStub, sibling: ElementStub | null) {
+    child.remove();
+    this.children.splice(
+      sibling ? this.children.indexOf(sibling) : this.children.length,
+      0,
+      child,
+    );
+    child.parentNode = this;
+    return child;
+  }
+  disabled = false;
   textContent = "";
-  focus = vi.fn();
+  static focused: ElementStub | null = null;
+  get tabIndex(): number {
+    const explicit = this.attributes.get("tabindex");
+    return explicit === undefined
+      ? this.tagName === "button"
+        ? 0
+        : -1
+      : Number(explicit);
+  }
+  set tabIndex(value: number) {
+    this.attributes.set("tabindex", String(value));
+  }
+  focus = vi.fn<(options?: FocusOptions) => void>(() => {
+    if (
+      this.isConnected &&
+      !this.disabled &&
+      (this.tagName === "button" || this.attributes.has("tabindex"))
+    )
+      ElementStub.focused = this;
+  });
   constructor(readonly tagName: string) {
     super();
   }
   append(...children: ElementStub[]) {
-    this.children.push(...children);
+    for (const child of children) this.insertBefore(child, null);
   }
   appendChild(child: ElementStub) {
     this.append(child);
     return child;
   }
   replaceChildren(...children: ElementStub[]) {
-    this.children.splice(0, this.children.length, ...children);
+    for (const child of [...this.children]) child.remove();
+    this.append(...children);
   }
   setAttribute(key: string, value: string) {
     this.attributes.set(key, value);
@@ -47,8 +96,10 @@ class ElementStub extends EventTarget {
   removeAttribute(key: string) {
     this.attributes.delete(key);
   }
-  querySelectorAll() {
-    return [];
+  querySelectorAll(selector: string) {
+    return selector === "button[data-value]"
+      ? this.descendants("button").filter((b) => b.dataset.value)
+      : [];
   }
   descendants(tagName: string): ElementStub[] {
     return this.children.flatMap((child) => [
@@ -120,55 +171,133 @@ function publication(): PublicPlaceDetail {
 
 function fixture() {
   vi.stubGlobal("HTMLButtonElement", ElementStub);
+  ElementStub.focused = null;
   const body = new ElementStub("body");
   const document = {
     documentElement: { lang: "pt-BR" },
+    get activeElement() {
+      return ElementStub.focused;
+    },
     body,
     createElement: (tag: string) => new ElementStub(tag),
     querySelector: () => null,
   } as unknown as Document;
-  const returnFocus = new ElementStub("button");
   const card = new ElementStub("section");
   card.dataset.placeId = placeId;
-  const original = new ElementStub("strong");
-  card.append(original);
-  body.append(card);
-  const renderMedia = vi.fn(() => document.createElement("figure"));
+  const actions = new ElementStub("div");
+  const trigger = new ElementStub("button");
+  trigger.textContent = "Ver ofertas";
+  trigger.dataset.value = `place-action:offers:${placeId}`;
+  actions.append(trigger);
+  const after = new ElementStub("nav");
+  after.tabIndex = -1;
+  body.append(card, actions, after);
+  const renderMedia = vi.fn<PublishedPlaceReading["renderMedia"]>(() =>
+    document.createElement("figure"),
+  );
   const sheet = installExploreFlowBottomSheet({ document });
   const show = (
-    detail: PublicPlaceDetail = publication(),
+    detail = publication(),
     selectedId: string = placeId,
+    locale: PublishedPlaceReading["locale"] = "pt",
+    close?: ElementStub,
   ) =>
     sheet.showPlace({
       placeId: selectedId,
       detail,
-      locale: "pt",
+      locale,
+      categoryLabel: locale === "en" ? "Attractions" : "Atrações",
       renderMedia,
       card: card as unknown as HTMLElement,
-      returnFocus: returnFocus as unknown as HTMLElement,
+      actions: actions as unknown as HTMLElement,
+      ...(close ? { close: close as unknown as HTMLElement } : {}),
     } satisfies PublishedPlaceReading);
+  const read = (revisionId = "published-21", returnFocus = trigger) =>
+    sheet.showPlaceAction({
+      placeId,
+      revisionId,
+      content: (detail, locale) =>
+        detail.partial.commerce === "ready"
+          ? {
+              title: detail.profile.name,
+              text: publicPlaceCatalogText("offers", detail.commerce, locale),
+            }
+          : null,
+      returnFocus: returnFocus as unknown as HTMLElement,
+    });
   return {
     body,
     sheet,
     card,
-    original,
-    returnFocus,
+    actions,
+    trigger,
+    after,
     renderMedia,
     show,
+    read,
     document,
   };
 }
 afterEach(() => vi.unstubAllGlobals());
 
 describe("published place reading on the Explore sheet", () => {
-  it("uses the selected publication and keeps offer consultation local to the detail", () => {
+  it("keeps one operable Close above the place and its action, including language changes and Back", () => {
     const f = fixture();
     const detail = publication();
-    f.show(detail);
-    expect(f.body.descendants("article")[0]?.dataset).toMatchObject({
+    const close = new ElementStub("button");
+    const onClose = vi.fn();
+    close.addEventListener("click", onClose);
+    f.card.append(close);
+    close.focus();
+    f.show(detail, placeId, "pt", close);
+    const original = f.card.descendants("article")[0];
+    expect(f.card.children).toEqual([close, original]);
+    expect(ElementStub.focused).toBe(close);
+    expect(f.read()).toBe(true);
+    const action = f.card.descendants("article")[0];
+    expect(action).not.toBe(original);
+    expect(f.card.children).toEqual([close, action]);
+    close.dispatchEvent(new Event("click"));
+    expect(onClose).toHaveBeenCalledOnce();
+    close.focus();
+    f.show(detail, placeId, "en", close);
+    expect(f.card.children).toEqual([close, action]);
+    expect(ElementStub.focused).toBe(close);
+    const replacement = new ElementStub("button");
+    f.show(detail, placeId, "en", replacement);
+    expect(f.card.children).toEqual([replacement, action]);
+    expect(ElementStub.focused).toBe(replacement);
+    expect(f.sheet.backToPlace()).toBe(true);
+    expect(f.card.children).toEqual([
+      replacement,
+      f.card.descendants("article")[0],
+    ]);
+    expect(ElementStub.focused).toBe(f.trigger);
+  });
+
+  it("renders one published card and moves the controller's actual buttons with their listeners", () => {
+    const f = fixture();
+    const detail = publication();
+    const onSelect = vi.fn();
+    f.trigger.addEventListener("click", onSelect);
+    expect(f.show(detail)).toBe(true);
+    expect(f.card.dataset).toMatchObject({
+      placeId,
+      publishedPlaceCard: "true",
+      publicationRevision: "published-21",
+    });
+    expect(f.card.descendants("article")[0]?.dataset).toMatchObject({
       placeId,
       publicationRevision: "published-21",
     });
+    expect(f.card.descendants("h2")[0]?.textContent).toBe(detail.profile.name);
+    expect(f.card.descendants("p").map((e) => e.textContent)).toEqual([
+      "Descrição publicada",
+    ]);
+    expect(f.card.descendants("button")).toEqual([f.trigger]);
+    expect(
+      f.body.descendants("button").filter((button) => button === f.trigger),
+    ).toHaveLength(1);
     expect(f.renderMedia).toHaveBeenCalledWith(
       f.document,
       detail.media,
@@ -176,17 +305,14 @@ describe("published place reading on the Explore sheet", () => {
       detail.profile.name,
       "pt",
     );
-    expect(f.body.descendants("summary")[0]?.textContent).toBe("Ver ofertas");
-    expect(f.body.descendants("p").map((e) => e.textContent)).toEqual([
-      "Descrição publicada",
-      "Ofertas · preços de catálogo",
-      expect.stringMatching(/Experiência Pôr do Sol — R\$\s50,00/),
-    ]);
-    expect(f.body.descendants("a")).toHaveLength(0);
+    f.trigger.dispatchEvent(new Event("click"));
+    expect(onSelect).toHaveBeenCalledOnce();
+    expect(f.trigger.focus).not.toHaveBeenCalled();
   });
-  it("omits absent offers and invokes the existing missing-photo renderer", () => {
+  it("retains an empty authorized action set and uses the existing missing-photo renderer", () => {
     const f = fixture(),
       d = publication();
+    f.actions.replaceChildren();
     f.show({
       ...d,
       media: null,
@@ -200,87 +326,196 @@ describe("published place reading on the Explore sheet", () => {
       d.profile.name,
       "pt",
     );
-    expect(f.body.descendants("details")).toHaveLength(0);
+    expect(f.card.descendants("button")).toHaveLength(0);
+    expect(f.card.descendants("details")).toHaveLength(0);
   });
-  it("never shows media from another place or offers outside the published action scope", () => {
+  it("rejects media from another place and media that is still partial", () => {
     const f = fixture(),
       d = publication();
-    f.show({
-      ...d,
-      media: { ...d.media!, placeId: "other" },
-      actions: {
-        ...d.actions,
-        secondaryActions: [
-          {
-            ...d.actions.secondaryActions[0]!,
-            value: "place-action:offers:other",
-          },
-        ],
-      },
-    });
-    expect(f.renderMedia).toHaveBeenCalledWith(
-      f.document,
-      null,
-      placeId,
-      d.profile.name,
-      "pt",
-    );
-    expect(f.body.descendants("details")).toHaveLength(0);
+    f.show({ ...d, media: { ...d.media!, placeId: "other" } });
+    f.show({ ...d, partial: { ...d.partial, media: "unavailable" } });
+    for (const call of f.renderMedia.mock.calls) expect(call[1]).toBeNull();
   });
-  it("rejects a mismatched selection, destination or unknown revision before rendering", () => {
+  it("rejects a mismatched selection, destination or unknown revision before disturbing the current card", () => {
     const f = fixture(),
       d = publication();
-    f.show(d, "other");
-    f.show({ ...d, actions: { ...d.actions, destinationId: "other" } });
-    f.show({ ...d, revision: { id: "", number: 0 } });
-    expect(f.body.descendants("article")).toHaveLength(0);
-    expect(f.renderMedia).not.toHaveBeenCalled();
-  });
-  it("ignores a stale open while the current reading is visible", () => {
-    const f = fixture();
     f.show();
     const current = f.card.firstChild;
-    f.show(publication(), "another-place");
+    expect(f.show(d, "other")).toBe(false);
+    expect(
+      f.show({
+        ...d,
+        profile: { ...d.profile, destinationId: "" },
+        actions: { ...d.actions, destinationId: "" },
+      }),
+    ).toBe(false);
+    expect(
+      f.show({ ...d, actions: { ...d.actions, destinationId: "other" } }),
+    ).toBe(false);
+    expect(f.show({ ...d, revision: { id: "", number: 0 } })).toBe(false);
+    expect(f.show({ ...d, revision: { id: "published-20", number: 20 } })).toBe(
+      false,
+    );
+    expect(f.show({ ...d, revision: { id: "conflict", number: 21 } })).toBe(
+      false,
+    );
+    expect(f.show({ ...d, revision: { id: "published-21", number: 22 } })).toBe(
+      false,
+    );
     expect(f.card.firstChild).toBe(current);
-    f.card.isConnected = false;
-    current!.descendants("button")[0]!.dispatchEvent(new Event("click"));
-    expect(f.returnFocus.focus).not.toHaveBeenCalled();
+    expect(f.renderMedia).toHaveBeenCalledTimes(1);
   });
-  it("does not restore an old reading over a replacement selection", () => {
-    const f = fixture();
-    f.show();
-    const back = f.card.descendants("button")[0]!;
-    const replacement = new ElementStub("strong");
-    f.card.dataset.placeId = "place-b";
-    f.card.replaceChildren(replacement);
-    back.dispatchEvent(new Event("click"));
-    expect(f.card.firstChild).toBe(replacement);
-    expect(f.returnFocus.focus).not.toHaveBeenCalled();
-  });
-  it.each(["click", "Escape"])(
-    "returns to the original control without scrolling on %s",
+  it.each(["click", "Escape", "controller"])(
+    "returns from the subview to the same place, gallery and triggering button by %s",
     (method) => {
       const f = fixture();
       f.sheet.setState("full");
       f.show();
-      const article = f.card.descendants("article")[0]!;
+      const article = f.card.firstChild,
+        gallery = f.card.descendants("figure")[0];
+      expect(f.read()).toBe(true);
+      expect(f.card.descendants("p").map((e) => e.textContent)).toEqual([
+        "Ofertas · preços de catálogo",
+        expect.stringMatching(/Experiência Pôr do Sol — R\$\s50,00/),
+      ]);
+      const back = f.card.descendants("button")[0]!;
+      expect(back.textContent).toBe("Voltar ao local");
+      expect(back.focus).toHaveBeenCalledWith({ preventScroll: true });
       if (method === "click") {
-        const back = article
-          .descendants("button")
-          .find((e) => e.textContent === "Voltar ao local");
-        expect(back).toBeDefined();
-        back!.dispatchEvent(new Event("click"));
-      } else {
+        back.dispatchEvent(new Event("click"));
+      } else if (method === "Escape") {
         const ev = Object.assign(new Event("keydown", { cancelable: true }), {
           key: "Escape",
         });
-        article.dispatchEvent(ev);
+        f.card.firstChild!.dispatchEvent(ev);
         expect(ev.defaultPrevented).toBe(true);
+      } else {
+        expect(f.sheet.backToPlace()).toBe(true);
       }
-      expect(f.card.firstChild).toBe(f.original);
+      expect(f.card.firstChild).toBe(article);
+      expect(f.card.descendants("figure")[0]).toBe(gallery);
+      expect(f.card.descendants("button")).toEqual([f.trigger]);
       expect(f.sheet.getState()).toBe("full");
-      expect(f.card.descendants("article")).toHaveLength(0);
-      expect(f.returnFocus.focus).toHaveBeenCalledWith({ preventScroll: true });
+      expect(f.trigger.focus).toHaveBeenCalledWith({ preventScroll: true });
+      expect(f.sheet.backToPlace()).toBe(false);
     },
   );
+  it("retains an open action and its focused Back when the same revision is shown again", () => {
+    const f = fixture();
+    f.show();
+    f.read();
+    const current = f.card.firstChild,
+      back = f.card.descendants("button")[0],
+      calls = back!.focus.mock.calls.length;
+    f.show();
+    expect(f.card.firstChild).toBe(current);
+    expect(ElementStub.focused).toBe(back);
+    expect(back!.focus).toHaveBeenCalledTimes(calls);
+    expect(f.sheet.backToPlace()).toBe(true);
+    expect(ElementStub.focused).toBe(f.trigger);
+    expect(f.renderMedia).toHaveBeenCalledTimes(1);
+  });
+  it("translates an open action in place and returns to its replacement control by value", () => {
+    const f = fixture(),
+      d = publication();
+    f.show(d);
+    f.read();
+    const current = f.card.firstChild,
+      back = f.card.descendants("button")[0]!;
+    const replacement = new ElementStub("button");
+    replacement.dataset.value = f.trigger.dataset.value!;
+    replacement.textContent = "View offers";
+    f.actions.replaceChildren(replacement);
+    const translated = {
+      ...d,
+      profile: {
+        ...d.profile,
+        name: "Pilot place",
+        description: "Published description",
+      },
+    };
+    f.show(translated, placeId, "en");
+    expect(f.card.firstChild).toBe(current);
+    expect(f.card.descendants("button")[0]).toBe(back);
+    expect(back.textContent).toBe("Back to place");
+    expect(ElementStub.focused).toBe(back);
+    expect(f.card.descendants("h2")[0]?.textContent).toBe("Pilot place");
+    expect(f.card.descendants("p")[0]?.textContent).toBe(
+      "Offers · catalog prices",
+    );
+    back.dispatchEvent(new Event("click"));
+    expect(f.card.descendants("p")[0]?.textContent).toBe(
+      "Published description",
+    );
+    expect(ElementStub.focused).toBe(replacement);
+  });
+  it("restores focus to the card when a focused action becomes unavailable", () => {
+    const f = fixture();
+    f.show();
+    f.read();
+    f.trigger.disabled = true;
+    f.show();
+    expect(f.sheet.backToPlace()).toBe(false);
+    expect(f.card.attributes.get("tabindex")).toBe("-1");
+    expect(ElementStub.focused).toBe(f.card);
+  });
+  it("keeps external focus during language changes and disappearance of the action", () => {
+    const f = fixture(),
+      d = publication();
+    f.show(d);
+    f.read();
+    f.after.focus();
+    f.show(
+      { ...d, profile: { ...d.profile, name: "Pilot place" } },
+      placeId,
+      "en",
+    );
+    expect(ElementStub.focused).toBe(f.after);
+    f.show(
+      { ...d, partial: { ...d.partial, commerce: "unavailable" } },
+      placeId,
+      "en",
+    );
+    expect(f.sheet.backToPlace()).toBe(false);
+    expect(ElementStub.focused).toBe(f.after);
+    expect(f.card.descendants("h2")[0]?.textContent).toBe("Local do piloto");
+  });
+  it("rejects late action results and stale Back after a new revision of the same place", () => {
+    const f = fixture(),
+      d = publication();
+    f.show();
+    f.read();
+    const oldBack = f.card.descendants("button")[0]!;
+    f.show({ ...d, revision: { id: "published-22", number: 22 } });
+    const article = f.card.firstChild;
+    expect(f.read()).toBe(false);
+    expect(f.read("published-22", new ElementStub("button"))).toBe(false);
+    oldBack.dispatchEvent(new Event("click"));
+    expect(f.card.firstChild).toBe(article);
+    expect(f.trigger.focus).not.toHaveBeenCalled();
+  });
+  it("leaves a replacement card and keyboard focus untouched after the selection changes", () => {
+    const f = fixture();
+    f.show();
+    f.read();
+    const oldBack = f.card.descendants("button")[0]!,
+      replacement = new ElementStub("strong");
+    f.card.dataset.placeId = "another-place";
+    f.card.replaceChildren(replacement);
+    oldBack.dispatchEvent(new Event("click"));
+    f.sheet.hide();
+    expect(f.card.firstChild).toBe(replacement);
+    expect(f.trigger.focus).not.toHaveBeenCalled();
+  });
+  it("returns the original action surface to its exact shell position when leaving the place", () => {
+    const f = fixture();
+    f.show();
+    f.read();
+    f.sheet.hide();
+    expect(f.actions.parentNode).toBe(f.body);
+    expect(f.actions.nextSibling).toBe(f.after);
+    expect(f.card.dataset.publishedPlaceCard).toBeUndefined();
+    expect(f.sheet.backToPlace()).toBe(false);
+    expect(f.trigger.focus).not.toHaveBeenCalled();
+  });
 });
