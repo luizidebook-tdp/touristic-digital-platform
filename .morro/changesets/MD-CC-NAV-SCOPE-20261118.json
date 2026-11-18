@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-CC-NAV-SCOPE-20261118",
+  "objective": "synchronize-global-and-destination-overview-shortcuts-with-the-visible-control-center-scope",
+  "baseSha": "8628a9c270512c5de58d8b7ae48a9a52d5926323",
+  "branch": "fix/control-center-overview-scope-20261118",
+  "state": "IMPLEMENTING",
+  "risk": "critical",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-CC-NAV-SCOPE-20261118.json",
+      "apps/control-center/public/control-center-shell-v1.js",
+      "apps/morro-digital-platform/src/ux/control-center-shell-sidebar-v1-contract.test.ts"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["platform-authz", "TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "full-quality",
+    "domain-invariants",
+    "integration",
+    "exact-head-release-gates",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "dependencies",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 600
+    },
+    "commands": [
+      {
+        "id": "ownership-and-claim-invariants",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/fabric/ownership-path.test.mjs",
+          "tooling/fabric/claim-guard.test.mjs"
+        ],
+        "timeoutSeconds": 600
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}

@@ -255,6 +255,21 @@
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-20T11:00:00.000Z"
+    },
+    "MD-CC-NAV-SCOPE-20261118": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "fix/control-center-overview-scope-20261118",
+      "baseSha": "8628a9c270512c5de58d8b7ae48a9a52d5926323",
+      "paths": [
+        ".morro/changesets/MD-CC-NAV-SCOPE-20261118.json",
+        "apps/control-center/public/control-center-shell-v1.js",
+        "apps/morro-digital-platform/src/ux/control-center-shell-sidebar-v1-contract.test.ts"
+      ],
+      "domains": ["auth"],
+      "risk": "P0",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-20T19:00:00.000Z"
     }
   }
 }
