@@ -1,8 +1,26 @@
+import type { AssistantLocale } from "@touristic/assistant";
+import type { PublicPlaceDetail } from "@touristic/business";
+import { publicPlaceCatalogText } from "./public-place-catalog-presentation.js";
 import { createFeatureStyleGate } from "./feature-styles.js";
 export type ExploreFlowBottomSheetState = "peek" | "half" | "full";
 export type ExploreFlowBottomSheetKind = "explore" | "tour";
 export type ExploreFlowBottomSheetStatus =
   "loading" | "ready" | "empty" | "error";
+
+export interface PublishedPlaceReading {
+  readonly placeId: string;
+  readonly detail: PublicPlaceDetail;
+  readonly locale: AssistantLocale;
+  /** The active map controller owns the published gallery and its missing-photo fallback. */
+  readonly renderMedia: (
+    document: Document,
+    media: PublicPlaceDetail["media"],
+    placeId: string,
+    name: string,
+    locale: AssistantLocale,
+  ) => HTMLElement;
+  readonly returnFocus: HTMLElement;
+}
 
 export interface ExploreFlowBottomSheetPresentation {
   readonly kind: ExploreFlowBottomSheetKind;
@@ -17,6 +35,7 @@ export interface ExploreFlowBottomSheetPresentation {
 
 export interface ExploreFlowBottomSheetController {
   show(presentation: ExploreFlowBottomSheetPresentation): void;
+  showPlace(reading: PublishedPlaceReading): void;
   hide(): void;
   setState(state: ExploreFlowBottomSheetState): void;
   getState(): ExploreFlowBottomSheetState;
@@ -30,6 +49,7 @@ export interface ExploreFlowBottomSheetOptions {
 
 type SheetCopy = Readonly<{
   close: string;
+  backToPlace: string;
   loading: string;
   empty: string;
   unavailable: string;
@@ -38,6 +58,7 @@ type SheetCopy = Readonly<{
 const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
   pt: {
     close: "Fechar painel",
+    backToPlace: "Voltar ao local",
     loading: "Atualizando o mapa e os resultados…",
     empty: "Nenhum resultado encontrado para este filtro.",
     unavailable:
@@ -50,6 +71,7 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
   },
   en: {
     close: "Close panel",
+    backToPlace: "Back to place",
     loading: "Updating the map and results…",
     empty: "No results were found for this filter.",
     unavailable:
@@ -62,6 +84,7 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
   },
   es: {
     close: "Cerrar panel",
+    backToPlace: "Volver al lugar",
     loading: "Actualizando el mapa y los resultados…",
     empty: "No se encontraron resultados para este filtro.",
     unavailable:
@@ -74,6 +97,7 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
   },
   he: {
     close: "סגירת הלוח",
+    backToPlace: "חזרה למקום",
     loading: "מעדכן את המפה והתוצאות…",
     empty: "לא נמצאו תוצאות למסנן הזה.",
     unavailable: "לא ניתן לעדכן את המפה כרגע. המסננים שלך נשמרו.",
@@ -139,6 +163,78 @@ function createStepButton(
   button.title = direction === "up" ? copy.states.full : copy.states.peek;
   button.textContent = direction === "up" ? "⌃" : "⌄";
   return button;
+}
+
+/** Build a read-only detail from the single publication already accepted for the map selection. */
+function createPublishedPlaceReading(
+  document: Document,
+  reading: PublishedPlaceReading,
+): HTMLElement | null {
+  const { placeId, detail, locale, renderMedia } = reading;
+  if (
+    !placeId ||
+    detail.profile.id !== placeId ||
+    detail.actions.placeId !== placeId ||
+    detail.actions.destinationId !== detail.profile.destinationId ||
+    !detail.revision.id ||
+    !Number.isSafeInteger(detail.revision.number) ||
+    detail.revision.number < 1
+  ) {
+    return null;
+  }
+  const content = document.createElement("article");
+  content.dataset.placeId = placeId;
+  content.dataset.publicationRevision = detail.revision.id;
+  const media =
+    detail.partial.media === "ready" && detail.media?.placeId === placeId
+      ? detail.media
+      : null;
+  content.append(
+    renderMedia(document, media, placeId, detail.profile.name, locale),
+  );
+  const description =
+    detail.profile.description?.trim() ||
+    detail.profile.shortDescription?.trim();
+  if (description) {
+    const body = document.createElement("p");
+    body.textContent = description;
+    content.append(body);
+  }
+
+  // Browsing a catalog is local presentation. Only expose the published read action.
+  const offerAction = [
+    detail.actions.primaryAction,
+    ...detail.actions.secondaryActions,
+  ].find(
+    (action) =>
+      action?.id === "offers" &&
+      action.value === `place-action:offers:${placeId}` &&
+      !action.disabled &&
+      action.availability === "available",
+  );
+  if (
+    offerAction &&
+    detail.partial.actions === "ready" &&
+    detail.partial.commerce === "ready" &&
+    detail.commerce?.offers.length
+  ) {
+    const offers = document.createElement("details");
+    const label = document.createElement("summary");
+    label.textContent = offerAction.label;
+    offers.append(label);
+    const lines = publicPlaceCatalogText(
+      "offers",
+      detail.commerce,
+      locale,
+    ).split("\n");
+    for (const line of lines) {
+      const paragraph = document.createElement("p");
+      paragraph.textContent = line;
+      offers.append(paragraph);
+    }
+    content.append(offers);
+  }
+  return content;
 }
 
 export function installExploreFlowBottomSheet({
@@ -316,7 +412,17 @@ export function installExploreFlowBottomSheet({
     setState(state);
   };
 
+  let stateBeforePlace: ExploreFlowBottomSheetState | undefined;
+  const clearPlaceReading = (): void => {
+    if (stateBeforePlace === undefined) return;
+    setState(stateBeforePlace);
+    stateBeforePlace = undefined;
+    delete sheet.dataset.placeReading;
+    richContent.replaceChildren();
+  };
+
   const render = (presentation: ExploreFlowBottomSheetPresentation): void => {
+    clearPlaceReading();
     dismissHandler = presentation.onDismiss;
     clearCompatibilityMessageSource();
     compatibilityMessageSource = presentation.messageSource;
@@ -361,6 +467,24 @@ export function installExploreFlowBottomSheet({
     sheet.setAttribute("aria-hidden", "false");
   };
 
+  const hide = (): void => {
+    featureStyles.cancel();
+    if (destroyed) return;
+    dismissHandler = undefined;
+    activeKind = undefined;
+    clearCompatibilityMessageSource();
+    sheet.classList.add("hidden");
+    sheet.setAttribute("aria-hidden", "true");
+    delete sheet.dataset.flowKind;
+    clearPlaceReading();
+  };
+
+  sheet.addEventListener("keydown", (event) => {
+    if (sheet.dataset.placeReading !== "true" || event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    dismissHandler?.();
+  });
   close.addEventListener("click", () => dismissHandler?.());
 
   return Object.freeze({
@@ -370,16 +494,37 @@ export function installExploreFlowBottomSheet({
         if (!destroyed) render(presentation);
       });
     },
-    hide(): void {
-      featureStyles.cancel();
+    showPlace(reading: PublishedPlaceReading): void {
       if (destroyed) return;
-      dismissHandler = undefined;
-      activeKind = undefined;
-      clearCompatibilityMessageSource();
-      sheet.classList.add("hidden");
-      sheet.setAttribute("aria-hidden", "true");
-      delete sheet.dataset.flowKind;
+      const article = createPublishedPlaceReading(document, reading);
+      if (!article) {
+        hide();
+        return;
+      }
+      featureStyles.run(() => {
+        if (destroyed) return;
+        render({
+          kind: "explore",
+          accessibleLabel: reading.detail.profile.name,
+          source: document.createElement("div"),
+          content: article,
+          onDismiss() {
+            hide();
+            if (reading.returnFocus.isConnected)
+              reading.returnFocus.focus({ preventScroll: true });
+          },
+        });
+        stateBeforePlace = state;
+        sheet.dataset.placeReading = "true";
+        const label = currentCopy(document).backToPlace;
+        close.setAttribute("aria-label", label);
+        close.title = label;
+        setState("half");
+        content.scrollTop = 0;
+        close.focus({ preventScroll: true });
+      });
     },
+    hide,
     setState,
     getState(): ExploreFlowBottomSheetState {
       return state;
