@@ -19,6 +19,7 @@ export interface PublishedPlaceReading {
     name: string,
     locale: AssistantLocale,
   ) => HTMLElement;
+  readonly card: HTMLElement;
   readonly returnFocus: HTMLElement;
 }
 
@@ -173,6 +174,7 @@ function createPublishedPlaceReading(
   const { placeId, detail, locale, renderMedia } = reading;
   if (
     !placeId ||
+    reading.card.dataset.placeId !== placeId ||
     detail.profile.id !== placeId ||
     detail.actions.placeId !== placeId ||
     detail.actions.destinationId !== detail.profile.destinationId ||
@@ -185,6 +187,11 @@ function createPublishedPlaceReading(
   const content = document.createElement("article");
   content.dataset.placeId = placeId;
   content.dataset.publicationRevision = detail.revision.id;
+  content.dataset.placeDetailVisual = "true";
+  const heading = document.createElement("h2");
+  heading.className = "md-assistant-place-detail-title";
+  heading.textContent = detail.profile.name;
+  content.append(heading);
   const media =
     detail.partial.media === "ready" && detail.media?.placeId === placeId
       ? detail.media
@@ -412,17 +419,15 @@ export function installExploreFlowBottomSheet({
     setState(state);
   };
 
-  let stateBeforePlace: ExploreFlowBottomSheetState | undefined;
-  const clearPlaceReading = (): void => {
-    if (stateBeforePlace === undefined) return;
-    setState(stateBeforePlace);
-    stateBeforePlace = undefined;
-    delete sheet.dataset.placeReading;
-    richContent.replaceChildren();
+  let restorePlaceCard: (() => boolean) | undefined;
+  const closePlace = (): boolean => {
+    const restore = restorePlaceCard;
+    restorePlaceCard = undefined;
+    return restore?.() ?? false;
   };
 
   const render = (presentation: ExploreFlowBottomSheetPresentation): void => {
-    clearPlaceReading();
+    closePlace();
     dismissHandler = presentation.onDismiss;
     clearCompatibilityMessageSource();
     compatibilityMessageSource = presentation.messageSource;
@@ -476,15 +481,9 @@ export function installExploreFlowBottomSheet({
     sheet.classList.add("hidden");
     sheet.setAttribute("aria-hidden", "true");
     delete sheet.dataset.flowKind;
-    clearPlaceReading();
+    closePlace();
   };
 
-  sheet.addEventListener("keydown", (event) => {
-    if (sheet.dataset.placeReading !== "true" || event.key !== "Escape") return;
-    event.preventDefault();
-    event.stopPropagation();
-    dismissHandler?.();
-  });
   close.addEventListener("click", () => dismissHandler?.());
 
   return Object.freeze({
@@ -496,33 +495,47 @@ export function installExploreFlowBottomSheet({
     },
     showPlace(reading: PublishedPlaceReading): void {
       if (destroyed) return;
+      // The place card already lives inside the styled assistant dock. Keep its
+      // original nodes (including gallery listeners and position) for Back.
+      hide();
+      if (!reading.card.isConnected) return;
       const article = createPublishedPlaceReading(document, reading);
-      if (!article) {
-        hide();
-        return;
-      }
-      featureStyles.run(() => {
-        if (destroyed) return;
-        render({
-          kind: "explore",
-          accessibleLabel: reading.detail.profile.name,
-          source: document.createElement("div"),
-          content: article,
-          onDismiss() {
-            hide();
-            if (reading.returnFocus.isConnected)
-              reading.returnFocus.focus({ preventScroll: true });
-          },
-        });
-        stateBeforePlace = state;
-        sheet.dataset.placeReading = "true";
-        const label = currentCopy(document).backToPlace;
-        close.setAttribute("aria-label", label);
-        close.title = label;
-        setState("half");
-        content.scrollTop = 0;
-        close.focus({ preventScroll: true });
+      if (!article) return;
+      const card = reading.card;
+      const previous = Array.from(card.childNodes);
+      const back = document.createElement("button");
+      back.type = "button";
+      back.className = "md-button md-button--secondary";
+      back.textContent = currentCopy(document).backToPlace;
+      article.append(back);
+      card.replaceChildren(article);
+      const restore = (): boolean => {
+        if (
+          card.firstChild !== article ||
+          card.dataset.placeId !== reading.placeId
+        )
+          return false;
+        card.replaceChildren(...previous);
+        return true;
+      };
+      restorePlaceCard = restore;
+      const goBack = (): void => {
+        if (
+          restorePlaceCard === restore &&
+          closePlace() &&
+          reading.returnFocus.isConnected
+        ) {
+          reading.returnFocus.focus({ preventScroll: true });
+        }
+      };
+      back.addEventListener("click", goBack);
+      article.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        goBack();
       });
+      back.focus({ preventScroll: true });
     },
     hide,
     setState,
@@ -533,6 +546,7 @@ export function installExploreFlowBottomSheet({
     destroy(): void {
       featureStyles.cancel();
       if (destroyed) return;
+      closePlace();
       clearCompatibilityMessageSource();
       destroyed = true;
       dismissHandler = undefined;

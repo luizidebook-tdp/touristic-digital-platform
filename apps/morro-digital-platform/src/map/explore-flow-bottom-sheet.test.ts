@@ -8,6 +8,12 @@ import {
 
 class ElementStub extends EventTarget {
   readonly children: ElementStub[] = [];
+  get childNodes() {
+    return this.children;
+  }
+  get firstChild(): ElementStub | null {
+    return this.children[0] ?? null;
+  }
   readonly dataset: Record<string, string> = {};
   readonly attributes = new Map<string, string>();
   readonly classes = new Set<string>();
@@ -122,6 +128,11 @@ function fixture() {
     querySelector: () => null,
   } as unknown as Document;
   const returnFocus = new ElementStub("button");
+  const card = new ElementStub("section");
+  card.dataset.placeId = placeId;
+  const original = new ElementStub("strong");
+  card.append(original);
+  body.append(card);
   const renderMedia = vi.fn(() => document.createElement("figure"));
   const sheet = installExploreFlowBottomSheet({ document });
   const show = (
@@ -133,9 +144,19 @@ function fixture() {
       detail,
       locale: "pt",
       renderMedia,
+      card: card as unknown as HTMLElement,
       returnFocus: returnFocus as unknown as HTMLElement,
     } satisfies PublishedPlaceReading);
-  return { body, sheet, returnFocus, renderMedia, show, document };
+  return {
+    body,
+    sheet,
+    card,
+    original,
+    returnFocus,
+    renderMedia,
+    show,
+    document,
+  };
 }
 afterEach(() => vi.unstubAllGlobals());
 
@@ -215,29 +236,40 @@ describe("published place reading on the Explore sheet", () => {
     expect(f.body.descendants("article")).toHaveLength(0);
     expect(f.renderMedia).not.toHaveBeenCalled();
   });
+  it("does not restore an old reading over a replacement selection", () => {
+    const f = fixture();
+    f.show();
+    const back = f.card.descendants("button")[0]!;
+    const replacement = new ElementStub("strong");
+    f.card.dataset.placeId = "place-b";
+    f.card.replaceChildren(replacement);
+    back.dispatchEvent(new Event("click"));
+    expect(f.card.firstChild).toBe(replacement);
+    expect(f.returnFocus.focus).not.toHaveBeenCalled();
+  });
   it.each(["click", "Escape"])(
     "returns to the original control without scrolling on %s",
     (method) => {
       const f = fixture();
       f.sheet.setState("full");
       f.show();
-      const aside = f.body.descendants("aside")[0]!;
+      const article = f.card.descendants("article")[0]!;
       if (method === "click") {
-        const back = aside
+        const back = article
           .descendants("button")
-          .find((e) => e.attributes.get("aria-label") === "Voltar ao local");
+          .find((e) => e.textContent === "Voltar ao local");
         expect(back).toBeDefined();
         back!.dispatchEvent(new Event("click"));
       } else {
         const ev = Object.assign(new Event("keydown", { cancelable: true }), {
           key: "Escape",
         });
-        aside.dispatchEvent(ev);
+        article.dispatchEvent(ev);
         expect(ev.defaultPrevented).toBe(true);
       }
-      expect(aside.attributes.get("aria-hidden")).toBe("true");
+      expect(f.card.firstChild).toBe(f.original);
       expect(f.sheet.getState()).toBe("full");
-      expect(aside.descendants("article")).toHaveLength(0);
+      expect(f.card.descendants("article")).toHaveLength(0);
       expect(f.returnFocus.focus).toHaveBeenCalledWith({ preventScroll: true });
     },
   );
