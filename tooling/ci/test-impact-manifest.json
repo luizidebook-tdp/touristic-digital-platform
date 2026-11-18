@@ -581,8 +581,7 @@
       "paths": [
         "apps/morro-digital-platform/tooling/affiliates-api.mjs",
         "apps/morro-digital-platform/tooling/affiliates-api.test.mjs",
-        "apps/morro-digital-platform/tooling/affiliate-portal-runtime-wiring.test.mjs",
-        "apps/morro-digital-platform/public/affiliate-portal.html"
+        "apps/morro-digital-platform/tooling/affiliate-portal-runtime-wiring.test.mjs"
       ],
       "risk": "HIGH",
       "dependsOn": [],

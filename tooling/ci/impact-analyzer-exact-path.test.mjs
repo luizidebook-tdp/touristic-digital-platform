@@ -330,36 +330,38 @@ for (const [path, domain, risk, db] of [
   });
 
 import { execFileSync } from "node:child_process";
-const ownerPanelPaths = {
-  business: [
-    "apps/morro-digital-platform/src/morro-pro-business-management.ts",
-    "apps/morro-digital-platform/src/morro-pro-business-management.test.ts",
-  ],
-  "affiliate-runtime": [
-    "apps/morro-digital-platform/public/affiliate-portal.html",
-  ],
-};
+const ownerBusinessPaths = [
+  "apps/morro-digital-platform/src/morro-pro-business-management.ts",
+  "apps/morro-digital-platform/src/morro-pro-business-management.test.ts",
+];
 
-test("owner panels inherit the existing domain gates for exact paths only", () => {
-  const references = {
-    business: "apps/morro-digital-platform/src/business-dashboard-client.ts",
-    "affiliate-runtime":
-      "apps/morro-digital-platform/tooling/affiliates-api.mjs",
-  };
-  for (const [domain, paths] of Object.entries(ownerPanelPaths)) {
-    const reference = analyzeFiles([references[domain]]);
-    assert.deepEqual(reference.domains, [domain]);
-    assert.equal(reference.classificationBlocked, false);
-    assert.equal(reference.needsFullSecurity, true);
-    for (const path of paths) {
-      const actual = analyzeFiles([path]);
-      assert.deepEqual(actual, { ...reference, files: [path] }, path);
-      for (const alias of nearCollisions(path)) {
-        const rejected = analyzeFiles([alias]);
-        assert.equal(rejected.classificationBlocked, true, alias);
-        assert.deepEqual(rejected.unknownFiles, [alias]);
-      }
+test("owner business management paths inherit the existing business gates exactly", () => {
+  const reference = analyzeFiles([
+    "apps/morro-digital-platform/src/business-dashboard-client.ts",
+  ]);
+  assert.deepEqual(reference.domains, ["business"]);
+  assert.equal(reference.classificationBlocked, false);
+  assert.equal(reference.needsFullSecurity, true);
+  for (const path of ownerBusinessPaths) {
+    assert.deepEqual(
+      analyzeFiles([path]),
+      { ...reference, files: [path] },
+      path,
+    );
+    for (const alias of nearCollisions(path)) {
+      const rejected = analyzeFiles([alias]);
+      assert.equal(rejected.classificationBlocked, true, alias);
+      assert.deepEqual(rejected.unknownFiles, [alias]);
     }
+  }
+});
+
+test("affiliate portal markup stays blocked until its browser proof is routed", () => {
+  const page = "apps/morro-digital-platform/public/affiliate-portal.html";
+  for (const files of [[page], [...ownerBusinessPaths, page]]) {
+    const report = analyzeFiles(files);
+    assert.equal(report.classificationBlocked, true);
+    assert.deepEqual(report.unknownFiles, [page]);
   }
 });
 
@@ -381,7 +383,7 @@ test("catalog and owner panel impact additions preserve all prior rules and cove
     ),
   );
   const additions = {
-    ...ownerPanelPaths,
+    business: ownerBusinessPaths,
     "explore-marker-rendering": [
       "apps/morro-digital-platform/src/map/public-place-catalog-presentation.ts",
     ],
