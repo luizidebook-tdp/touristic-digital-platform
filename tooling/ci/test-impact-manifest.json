@@ -301,7 +301,9 @@
         "apps/morro-digital-platform/src/business-",
         "apps/morro-digital-platform/public/business-",
         "apps/morro-digital-platform/tooling/business-",
-        "apps/morro-digital-platform/src/ux/business-"
+        "apps/morro-digital-platform/src/ux/business-",
+        "apps/morro-digital-platform/src/morro-pro-business-management.ts",
+        "apps/morro-digital-platform/src/morro-pro-business-management.test.ts"
       ],
       "excludePaths": [
         "**/package.json",
@@ -579,7 +581,8 @@
       "paths": [
         "apps/morro-digital-platform/tooling/affiliates-api.mjs",
         "apps/morro-digital-platform/tooling/affiliates-api.test.mjs",
-        "apps/morro-digital-platform/tooling/affiliate-portal-runtime-wiring.test.mjs"
+        "apps/morro-digital-platform/tooling/affiliate-portal-runtime-wiring.test.mjs",
+        "apps/morro-digital-platform/public/affiliate-portal.html"
       ],
       "risk": "HIGH",
       "dependsOn": [],
