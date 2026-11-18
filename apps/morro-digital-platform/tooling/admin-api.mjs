@@ -2452,6 +2452,25 @@ export function createAdminApi({
           "business.read",
         );
         if (!actor) return;
+        if (requestUrl.searchParams.get("view") === "owner-dashboard") {
+          if (request.method !== "GET") {
+            json(response, 405, { error: "METHOD_NOT_ALLOWED" });
+            return;
+          }
+          if (
+            !authApi.isDesignatedPanelOwner?.(actor) ||
+            supportContext(request, actor)
+          ) {
+            json(response, 403, { error: "MORRO_PRO_ROLE_DENIED" });
+            return;
+          }
+          const directory = businessesFromUsers(await authApi.listAdminUsers());
+          json(response, 200, {
+            subject: actor.subject,
+            businessIds: directory.map((business) => business.id),
+          });
+          return;
+        }
         json(response, 200, {
           businesses: businessesFromUsers(await authApi.listAdminUsers()),
           source: "identity-membership",

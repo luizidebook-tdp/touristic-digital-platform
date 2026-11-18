@@ -16,6 +16,7 @@ import {
 } from "./business-profile-view.js";
 import {
   createBusinessContextController,
+  hasExactBusinessResourceId,
   morroProModulePolicies,
   morroProModules,
   resolveMorroProModuleAccess,
@@ -1536,6 +1537,7 @@ export async function mountBusinessDashboardSurface(
       bootstrap.session.user.role,
       bootstrap.session.user.capabilities,
       [],
+      bootstrap.session.ownerDirectoryBusinessIds,
     );
     const accessByModule = new Map(
       access.map((item) => [item.id, item] as const),
@@ -1696,7 +1698,10 @@ export async function mountBusinessDashboardSurface(
       for (const scope of scopes) {
         const option = document.createElement("option");
         option.value = scope;
-        option.textContent = scope;
+        option.disabled = !hasExactBusinessResourceId(scope);
+        option.textContent = option.disabled
+          ? scope + " (identificador incompatível com o painel de negócios)"
+          : scope;
         option.selected = scope === businessId;
         selector.append(option);
       }
@@ -1783,9 +1788,14 @@ export async function mountBusinessDashboardSurface(
     activateView("dashboard");
   } catch (error: unknown) {
     entryMessage.textContent =
-      error instanceof Error
-        ? `Não foi possível abrir o dashboard: ${error.message}`
-        : "Não foi possível abrir o dashboard.";
+      error instanceof Error && error.message === "BUSINESS_ID_INCOMPATIBLE"
+        ? "O identificador da empresa no Control Center é incompatível com o painel de negócios."
+        : error instanceof Error &&
+            error.message === "MORRO_PRO_DIRECTORY_EMPTY"
+          ? "O diretório de empresas do Control Center ainda está vazio."
+          : error instanceof Error
+            ? `Não foi possível abrir o dashboard: ${error.message}`
+            : "Não foi possível abrir o dashboard.";
     entryScreen.hidden = false;
     mainDashboard.hidden = true;
   }

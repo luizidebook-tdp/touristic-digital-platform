@@ -181,6 +181,8 @@ function fakePool() {
 
 function apiHarness({
   resolveSession,
+  isDesignatedPanelOwner,
+  createIdentity,
   authorizeMutation,
   pool = fakePool(),
   environment = {},
@@ -189,6 +191,7 @@ function apiHarness({
 } = {}) {
   const api = createAffiliatesApi({
     authApi: {
+      isDesignatedPanelOwner,
       resolveSession:
         resolveSession ??
         (async () => ({
@@ -211,6 +214,7 @@ function apiHarness({
       return values[key] ?? "";
     },
     runtimeDependencies: {
+      createIdentity,
       createPool: () => pool,
       applySchema,
       applyIdentitySchema,
@@ -257,6 +261,7 @@ describe("affiliate portal HTTP security contract", () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.affiliate.affiliateId).toBe("aff_portal_0001");
+    expect(body).not.toHaveProperty("enrollment");
     expect(body.memberships).toHaveLength(1);
     expect(body.memberships[0].destination_id).toBe("morro-de-sao-paulo");
     expect(body.payoutAuthority).toEqual(
@@ -265,6 +270,38 @@ describe("affiliate portal HTTP security contract", () => {
         affiliateCanInitiatePayout: false,
       }),
     );
+    await api.stop();
+  });
+
+  it("offers only additional active programs to a designated owner with an existing membership", async () => {
+    const pool = fakePool();
+    const execute = pool.execute.bind(pool);
+    pool.execute = async (sql, params) => {
+      if (sql.includes("FROM affiliate_programs WHERE")) {
+        expect(params).toEqual(["morro-de-sao-paulo"]);
+        expect(sql).toContain("status = 'active'");
+        return [
+          [
+            { program_id: "program_morro_0001" },
+            { program_id: "program_morro_0002" },
+          ],
+        ];
+      }
+      return execute(sql, params);
+    };
+    const api = apiHarness({ pool, isDesignatedPanelOwner: () => true });
+    await api.start();
+    const res = responseRecorder();
+    await api.handle(
+      request("GET"),
+      res,
+      new URL("https://morro.example/api/affiliates/v1/me"),
+    );
+    expect(JSON.parse(res.body).enrollment).toMatchObject({
+      affiliateId: "aff_portal_0001",
+      membershipCount: 1,
+      programs: ["program_morro_0002"],
+    });
     await api.stop();
   });
 
@@ -836,5 +873,163 @@ describe("readiness driver resources with a synthetic protocol server", () => {
       clearTimeout(deadline);
       await harness.close();
     }
+  });
+});
+
+describe("personal enrollment for the designated Control Center owner", () => {
+  async function fixture(options = {}) {
+    let account = options.account ?? null;
+    const memberships = [];
+    const programId = "program_morro_0001";
+    const destinationId = "morro-de-sao-paulo";
+    const pool = fakePool();
+    pool.execute = vi.fn(async (sql, params) => {
+      if (sql.includes("FROM affiliate_accounts")) {
+        expect(params).toEqual(["owner-subject"]);
+        return [account ? [account] : []];
+      }
+      if (sql.includes("FROM affiliate_programs")) {
+        expect(params).toEqual([destinationId]);
+        expect(sql).toContain("status = 'active'");
+        return [options.noPrograms ? [] : [{ program_id: programId }]];
+      }
+      if (sql.includes("FROM affiliate_memberships")) {
+        expect(params).toEqual([account.affiliate_id, destinationId]);
+        return [memberships];
+      }
+      throw new Error("UNEXPECTED_QUERY");
+    });
+    const createAffiliate = vi.fn(async (input) => {
+      expect(input).toMatchObject({
+        identityReference: "owner-subject",
+        accountType: "person",
+        actor: { actorKind: "affiliate", actorReference: "owner-subject" },
+      });
+      account = {
+        affiliate_id: input.affiliateId,
+        account_type: "person",
+        status: "active",
+        fraud_blocked: 0,
+      };
+    });
+    const createMembership = vi.fn(async (input) => {
+      expect(input).toMatchObject({
+        affiliateId: account.affiliate_id,
+        programId,
+        destinationId,
+        acceptedTermsVersion: null,
+        actor: { actorKind: "affiliate", actorReference: "owner-subject" },
+      });
+      memberships.push({ program_id: input.programId });
+    });
+    const api = apiHarness({
+      pool,
+      resolveSession: async () => ({
+        subject: "owner-subject",
+        email: "owner@example.com",
+        role: "PLATFORM_OWNER",
+      }),
+      isDesignatedPanelOwner: () => options.designated !== false,
+      authorizeMutation: () => ({
+        allowed: options.csrf !== false,
+        reason: "invalid_csrf",
+      }),
+      createIdentity: () => ({ createAffiliate, createMembership }),
+    });
+    expect(await api.start()).toBe(true);
+    async function call(method, body) {
+      const response = responseRecorder();
+      await api.handle(
+        request(method, body),
+        response,
+        new URL("https://morro.example/api/affiliates/v1/enrollment"),
+      );
+      return { httpStatus: response.statusCode, ...JSON.parse(response.body) };
+    }
+    return { api, call, programId, createAffiliate, createMembership, pool };
+  }
+  it.each([
+    [{ designated: false }, { accountType: "person" }, 403],
+    [{ csrf: false }, { accountType: "person" }, 403],
+    [{}, { accountType: "organization" }, 400],
+    [{}, { accountType: "person", identityReference: "other" }, 400],
+    [{}, { accountType: "person", acceptedTermsVersion: "v1" }, 400],
+    [
+      {},
+      { accountType: "person", programId: "other-destination-program" },
+      409,
+    ],
+    [
+      {
+        account: {
+          affiliate_id: "other",
+          account_type: "organization",
+          status: "active",
+        },
+      },
+      { accountType: "person" },
+      409,
+    ],
+    [
+      {
+        account: {
+          affiliate_id: "inactive",
+          account_type: "person",
+          status: "suspended",
+        },
+      },
+      { accountType: "person" },
+      409,
+    ],
+  ])(
+    "validates enrollment authorizations and fields (%#)",
+    async (options, body, status) => {
+      const f = await fixture(options);
+      expect((await f.call("POST", body)).httpStatus).toBe(status);
+      expect(f.createAffiliate).not.toHaveBeenCalled();
+      expect(f.createMembership).not.toHaveBeenCalled();
+      await f.api.stop();
+    },
+  );
+  it("registers the person when there is no program and repeats without duplicate writes", async () => {
+    const f = await fixture({ noPrograms: true });
+    expect(await f.call("GET")).toMatchObject({
+      affiliateId: null,
+      accountEmail: "owner@example.com",
+      programs: [],
+    });
+    const state = await f.call("POST", { accountType: "person" });
+    expect(state).toMatchObject({
+      accountType: "person",
+      membershipCount: 0,
+      programs: [],
+    });
+    expect(await f.call("POST", { accountType: "person" })).toEqual(state);
+    expect(state).toMatchObject({
+      affiliateId: f.createAffiliate.mock.calls[0][0].affiliateId,
+      accountEmail: "owner@example.com",
+    });
+    expect(f.createAffiliate).toHaveBeenCalledTimes(1);
+    expect(f.createMembership).not.toHaveBeenCalled();
+    await f.api.stop();
+  });
+  it("requests membership using the session identity and preserves prior requests", async () => {
+    const f = await fixture();
+    const request = { accountType: "person", programId: f.programId };
+    const state = await f.call("POST", request);
+    expect(state).toMatchObject({
+      httpStatus: 200,
+      accountType: "person",
+      membershipCount: 1,
+      programs: [],
+    });
+    expect(await f.call("POST", request)).toEqual(state);
+    expect(state).toMatchObject({
+      affiliateId: f.createAffiliate.mock.calls[0][0].affiliateId,
+      accountEmail: "owner@example.com",
+    });
+    expect(f.createAffiliate).toHaveBeenCalledTimes(1);
+    expect(f.createMembership).toHaveBeenCalledTimes(1);
+    await f.api.stop();
   });
 });

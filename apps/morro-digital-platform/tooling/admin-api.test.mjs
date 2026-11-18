@@ -2185,7 +2185,7 @@ describe("Control Center generic domain mutation audit", () => {
 // Exercise the composed Auth and Admin handlers without authorization mocks.
 // Default runs use process-local security state. The explicit SQL variant also
 // proves revocation survives a fresh Auth handler and database connection.
-async function realSupportFixture(durable = false) {
+async function realAdminFixture(durable = false, panelSubject) {
   if (durable) {
     let database;
     try {
@@ -2206,6 +2206,17 @@ async function realSupportFixture(durable = false) {
   const password = "support handler regression fixture";
   const passwordHash = hashPassword(password, Buffer.alloc(16, 11));
   const users = [
+    ...(panelSubject === undefined
+      ? []
+      : [
+          { id: "designated", role: "PLATFORM_OWNER", businessIds: [] },
+          { id: "second-owner", role: "PLATFORM_OWNER", businessIds: [] },
+          {
+            id: "legacy-business",
+            role: "BUSINESS_OWNER",
+            businessIds: ["casa-", "biz_payments_acceptance"],
+          },
+        ]),
     { id: "support", role: "SUPPORT", businessIds: [] },
     { id: "target", role: "BUSINESS_OWNER", businessIds: ["tenant-a"] },
     { id: "other", role: "BUSINESS_OWNER", businessIds: ["tenant-b"] },
@@ -2225,6 +2236,7 @@ async function realSupportFixture(durable = false) {
       DASHBOARD_AUTH_SECRET:
         "support-handler-regression-secret-00000000000000000",
       DASHBOARD_AUTH_ORIGIN: "http://localhost",
+      CONTROL_CENTER_OWNER_PANEL_SUBJECT: panelSubject ?? "",
       DASHBOARD_USERS_JSON: JSON.stringify(users),
     })[key] ?? "";
   const events = [];
@@ -2277,6 +2289,21 @@ async function realSupportFixture(durable = false) {
       "x-csrf-token": response.data.csrfToken,
     };
   }
+  return {
+    auth,
+    admin,
+    login,
+    call,
+    events,
+    ownerCalls,
+    password,
+    restartAuth: () => createAuthApi({ getEnvironmentValue }),
+  };
+}
+
+async function realSupportFixture(durable = false) {
+  const fixture = await realAdminFixture(durable);
+  const { admin, call, login, password } = fixture;
   const support = await login("support");
   const target = await login("target");
   const other = await login("other");
@@ -2300,18 +2327,12 @@ async function realSupportFixture(durable = false) {
     cookie: `${support.cookie}; ${String(step.headers.get("set-cookie")).split(";", 1)[0]}`,
   };
   return {
-    auth,
-    admin,
-    call,
-    login,
+    ...fixture,
     support,
     target,
     other,
     elevated,
     handle,
-    events,
-    ownerCalls,
-    restartAuth: () => createAuthApi({ getEnvironmentValue }),
     path: `/api/admin/v1/users/target/sessions/${handle}/revoke`,
     body: {
       reason: "Investigação autorizada da sessão de teste",
@@ -2319,6 +2340,70 @@ async function realSupportFixture(durable = false) {
     },
   };
 }
+
+describe("Control Center owner business panel with Auth and Admin composition", () => {
+  const path = "/api/admin/v1/businesses?view=owner-dashboard";
+
+  it.each(["designated", ""])(
+    "binds the live directory to the configured subject %j",
+    async (subject) => {
+      const { auth, admin, login, call } = await realAdminFixture(
+        false,
+        subject,
+      );
+      try {
+        const owner = await login("designated");
+        const response = await call(admin, path, owner);
+        const second = await call(admin, path, await login("second-owner"));
+        expect(second.statusCode).toBe(403);
+        expect(second.data).toEqual({ error: "MORRO_PRO_ROLE_DENIED" });
+        if (!subject) {
+          expect(response.statusCode).toBe(403);
+          expect(response.data).toEqual({ error: "MORRO_PRO_ROLE_DENIED" });
+          return;
+        }
+        expect(response.statusCode).toBe(200);
+        expect(response.data).toEqual({
+          subject,
+          businessIds: [
+            "casa-",
+            "biz_payments_acceptance",
+            "tenant-a",
+            "tenant-b",
+          ],
+        });
+        const headers = {
+          host: "localhost",
+          origin: "http://localhost",
+          ...owner,
+        };
+        for (const [businessId, statusCode, error] of [
+          ["tenant-b", 200],
+          ["biz_payments_acceptance", 200],
+          ["unlisted", 403, "BUSINESS_ACCESS_DENIED"],
+          ["casa-", 409, "BUSINESS_ID_INCOMPATIBLE"],
+        ]) {
+          const apiPath = "/api/business/" + businessId + "/profile";
+          const output = responseRecorder();
+          const access = await auth.authorizeBusinessRequest(
+            request(apiPath, { method: "PUT", headers }),
+            output,
+            businessId,
+            { mutation: true },
+          );
+          if (statusCode === 200) expect(access?.businessId).toBe(businessId);
+          else {
+            expect(access).toBeNull();
+            expect(output.statusCode).toBe(statusCode);
+            expect(JSON.parse(output.body).error).toBe(error);
+          }
+        }
+      } finally {
+        await auth.stop();
+      }
+    },
+  );
+});
 
 describe("SUPPORT revocation with real Auth and Admin composition", () => {
   it.each([

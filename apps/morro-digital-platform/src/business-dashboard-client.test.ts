@@ -94,6 +94,74 @@ describe("M51 Business dashboard browser client", () => {
     expect(fixture.secureFetch).not.toHaveBeenCalled();
   });
 
+  it("loads the designated owner directory and the selected profile with the same identity", async () => {
+    const owner = session("PLATFORM_OWNER", []);
+    const directory = {
+      subject: owner.user.id,
+      businessIds: ["toca-do-morcego", "empresa-b"],
+    };
+    const { authClient, secureFetch } = authFixture(owner, [
+      Response.json(directory),
+      profileResponse(),
+    ]);
+    const result =
+      await createBusinessDashboardClient(authClient).bootstrap("empresa-b");
+    expect(result.session.user).toEqual(owner.user);
+    expect(result.session.ownerDirectoryBusinessIds).toEqual(
+      directory.businessIds,
+    );
+    expect(secureFetch.mock.calls.map(([url]) => url)).toEqual([
+      "/api/admin/v1/businesses?view=owner-dashboard",
+      "/api/business/empresa-b/profile",
+    ]);
+  });
+
+  it.each([
+    ["other-user", ["empresa-b"], "MORRO_PRO_ROLE_DENIED"],
+    ["user-1", [123], "MORRO_PRO_ROLE_DENIED"],
+    ["user-1", [], "MORRO_PRO_DIRECTORY_EMPTY"],
+    ["user-1", ["empresa-a"], "BUSINESS_ACCESS_DENIED"],
+  ])(
+    "stops before loading an unconfirmed business for %s and %j",
+    async (subject, businessIds, code) => {
+      const { authClient, secureFetch } = authFixture(
+        session("PLATFORM_OWNER", ["empresa-b"]),
+        [Response.json({ subject, businessIds })],
+      );
+      await expect(
+        createBusinessDashboardClient(authClient).bootstrap("empresa-b"),
+      ).rejects.toThrow(String(code));
+      expect(secureFetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("preserves staging identifiers and blocks aliases without losing other directory entries", async () => {
+    const directory = {
+      subject: "user-1",
+      businessIds: ["casa-", "biz_payments_acceptance", "casa"],
+    };
+    const { authClient, secureFetch } = authFixture(
+      session("PLATFORM_OWNER", []),
+      [Response.json(directory), profileResponse(), Response.json(directory)],
+    );
+    const client = createBusinessDashboardClient(authClient);
+    const result = await client.bootstrap();
+    expect(result.businessId).toBe("biz_payments_acceptance");
+    expect(result.session.ownerDirectoryBusinessIds).toEqual(
+      directory.businessIds,
+    );
+    expect(secureFetch.mock.calls[1]?.[0]).toBe(
+      "/api/business/biz_payments_acceptance/profile",
+    );
+    await expect(client.bootstrap("casa-")).rejects.toThrow(
+      "BUSINESS_ID_INCOMPATIBLE",
+    );
+    await expect(client.loadProfile("casa-")).rejects.toThrow(
+      "BUSINESS_ID_INCOMPATIBLE",
+    );
+    expect(secureFetch).toHaveBeenCalledTimes(3);
+  });
+
   it("saves profile mutations only through the Auth secureFetch port", async () => {
     const fixture = authFixture(session(), [
       profileResponse("Toca Atualizada"),

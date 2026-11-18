@@ -5,6 +5,7 @@ import {
 import {
   createAffiliatePortalClient,
   type AffiliateConversionView,
+  type AffiliateEnrollment,
   type AffiliateMembershipView,
   type AffiliatePortalProjection,
 } from "./affiliate-portal-client.js";
@@ -81,6 +82,9 @@ function appendMembership(
     membership.financial_onboarding_status,
   )}`;
 
+  if (membership.accepted_terms_version !== membership.terms_version) {
+    detail.append(" · Aceite dos termos vigentes pendente");
+  }
   item.append(title, status, detail);
   container.append(item);
 }
@@ -147,6 +151,12 @@ function renderProjection(projection: AffiliatePortalProjection): void {
   select.replaceChildren();
   for (const membership of projection.memberships) {
     if (
+      projection.affiliate.status !== "active" ||
+      !projection.affiliate.identityVerified ||
+      !projection.affiliate.contactVerified ||
+      projection.affiliate.fraudBlocked ||
+      !membership.accepted_terms_version ||
+      membership.accepted_terms_version !== membership.terms_version ||
       membership.status !== "approved" ||
       membership.program_status !== "active"
     ) {
@@ -232,18 +242,110 @@ byId("copy-referral").addEventListener("click", () => {
   })();
 });
 
+function renderEnrollment(state: AffiliateEnrollment): void {
+  byId("affiliate-user").textContent = state.accountEmail;
+  byId("affiliate-id").textContent = state.affiliateId ?? "Cadastro pendente";
+  if (state.status) setStatusBadge(byId("affiliate-status"), state.status);
+  byId("affiliate-verification").textContent =
+    state.accountType === "person"
+      ? "Pessoa física"
+      : state.accountType === "organization"
+        ? "Pessoa jurídica"
+        : "";
+
+  const message = byId("affiliate-enrollment-status");
+  const form = byId<HTMLFormElement>("affiliate-enrollment-form");
+  const select = byId<HTMLSelectElement>("affiliate-enrollment-program");
+  const button = byId<HTMLButtonElement>("affiliate-enroll");
+  const registered = state.affiliateId !== null;
+  const canJoin =
+    registered &&
+    state.accountType === "person" &&
+    state.status === "active" &&
+    !state.blocked;
+  const chooseProgram = canJoin && state.programs.length > 0;
+  select.replaceChildren();
+  for (const id of state.programs) select.add(new Option(id, id));
+  byId("affiliate-enrollment-program-label").hidden = !chooseProgram;
+  select.disabled = !chooseProgram;
+  form.hidden = registered && !chooseProgram;
+  button.textContent = registered
+    ? "Solicitar participação"
+    : "Cadastrar pessoa física";
+  if (!registered) {
+    message.textContent =
+      "O cadastro será vinculado à sua conta do Control Center.";
+    if (!state.programs.length)
+      message.append(" Nenhum programa ativo disponível neste destino.");
+  } else if (!canJoin) {
+    message.textContent =
+      "Já existe um cadastro vinculado à sua conta. Consulte a administração do programa para verificar a situação.";
+  } else {
+    message.textContent = state.programs.length
+      ? "Cadastro de pessoa física confirmado. Selecione um programa para solicitar participação."
+      : "Cadastro de pessoa física confirmado. Nenhum programa ativo disponível para inscrição neste destino.";
+  }
+  byId("affiliate-enrollment").hidden = false;
+}
+
+async function submitEnrollment(): Promise<void> {
+  const button = byId<HTMLButtonElement>("affiliate-enroll");
+  if (button.disabled) return;
+  const program = byId<HTMLSelectElement>("affiliate-enrollment-program");
+  button.disabled = true;
+  byId("affiliate-alert").hidden = true;
+  try {
+    const state = await portal.enrollPerson(
+      program.disabled ? undefined : program.value,
+    );
+    if (state.membershipCount > 0) await startPortal();
+    else renderEnrollment(state);
+  } catch (error) {
+    showError(error instanceof Error ? error.message : "UNKNOWN_ERROR");
+  } finally {
+    button.disabled = false;
+  }
+}
+byId("affiliate-enrollment-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  void submitEnrollment();
+});
+
 async function startPortal(): Promise<void> {
   const alert = byId("affiliate-alert");
   alert.hidden = true;
   const loading = byId("affiliate-loading");
   loading.hidden = false;
+  byId("affiliate-enrollment").hidden = true;
+  byId("affiliate-content").hidden = true;
   try {
     const { session, projection } = await portal.bootstrap();
     byId("affiliate-user").textContent = session.user.email;
+    if (
+      projection.enrollment?.programs.length &&
+      projection.enrollment.accountType === "person" &&
+      projection.enrollment.status === "active" &&
+      !projection.enrollment.blocked
+    ) {
+      renderEnrollment(projection.enrollment);
+    }
     renderProjection(projection);
     byId("affiliate-content").hidden = false;
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+    if (code === "AFFILIATE_ENROLLMENT_AVAILABLE") {
+      try {
+        renderEnrollment(await portal.getEnrollment());
+        return;
+      } catch (enrollmentError) {
+        showError(
+          enrollmentError instanceof Error
+            ? enrollmentError.message
+            : "UNKNOWN_ERROR",
+        );
+        return;
+      }
+    }
     showError(code);
     if (code === "AUTH_REQUIRED") {
       alert.textContent = "Entre para acessar seu portal de afiliados. ";

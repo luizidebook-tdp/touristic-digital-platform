@@ -538,6 +538,7 @@ function linkEligibility(account, membership) {
     membership.status === "approved" &&
     typeof membership.accepted_terms_version === "string" &&
     membership.accepted_terms_version.length > 0 &&
+    membership.accepted_terms_version === membership.terms_version &&
     membership.program_status === "active"
   );
 }
@@ -769,7 +770,236 @@ export function createAffiliatesApi({
     await closePool(activePool);
   }
 
-  async function authenticatedAccount(request, response, correlation) {
+  async function activeEnrollmentPrograms() {
+    const [programs] = await pool.execute(
+      "SELECT program_id FROM affiliate_programs WHERE destination_id = ? AND status = 'active' ORDER BY program_id",
+      [configuredDestinationId],
+    );
+    return programs.map((row) => row.program_id);
+  }
+
+  async function enrollmentState(subject) {
+    const account = await accountForIdentity(pool, subject);
+    const memberships = account
+      ? await membershipsForAffiliate(
+          pool,
+          account.affiliate_id,
+          configuredDestinationId,
+        )
+      : [];
+    return {
+      account,
+      memberships,
+      programs: await activeEnrollmentPrograms(),
+    };
+  }
+
+  function enrollmentView({ account, memberships, programs }, session) {
+    return {
+      accountEmail: session.email,
+      affiliateId: account?.affiliate_id ?? null,
+      accountType: account?.account_type ?? null,
+      status: account?.status ?? null,
+      blocked: account?.fraud_blocked === 1,
+      programs: programs.filter(
+        (id) => !memberships.some((m) => m.program_id === id),
+      ),
+      membershipCount: memberships.length,
+    };
+  }
+
+  async function handleEnrollment(request, response, correlation) {
+    const session = await authApi.resolveSession(request);
+    if (!session)
+      return json(response, 401, { error: "AUTH_REQUIRED" }, correlation);
+    if (!authApi.isDesignatedPanelOwner?.(session)) {
+      return json(
+        response,
+        403,
+        { error: "AFFILIATE_ENROLLMENT_FORBIDDEN" },
+        correlation,
+      );
+    }
+    if (request.method !== "GET" && request.method !== "POST") {
+      return json(response, 405, { error: "METHOD_NOT_ALLOWED" }, correlation);
+    }
+    response.setHeader("Vary", "Cookie");
+    const read = () => enrollmentState(session.subject);
+    if (request.method === "GET") {
+      return json(
+        response,
+        200,
+        enrollmentView(await read(), session),
+        correlation,
+      );
+    }
+    const decision = authApi.authorizeMutation(
+      request,
+      session,
+      "affiliate.self_enrollment",
+    );
+    if (!decision.allowed)
+      return json(
+        response,
+        403,
+        {
+          error:
+            decision.reason === "invalid_csrf"
+              ? "INVALID_CSRF"
+              : "ORIGIN_DENIED",
+        },
+        correlation,
+      );
+
+    const body = await readJsonBody(request).catch(() => null);
+    if (
+      !body ||
+      body.accountType !== "person" ||
+      Object.keys(body).some(
+        (key) => !["accountType", "programId"].includes(key),
+      ) ||
+      ("programId" in body && !safeReference(body.programId, 120))
+    ) {
+      return json(
+        response,
+        400,
+        { error: "INVALID_AFFILIATE_ENROLLMENT" },
+        correlation,
+      );
+    }
+
+    const initial = await read();
+    if (body.programId && !initial.programs.includes(body.programId)) {
+      return json(
+        response,
+        409,
+        { error: "AFFILIATE_PROGRAM_UNAVAILABLE" },
+        correlation,
+      );
+    }
+    const actor = {
+      actorKind: "affiliate",
+      actorReference: session.subject,
+      correlationId: correlation,
+    };
+    const authorization = {
+      async authorize(action, context) {
+        const allowed =
+          ["affiliate.manage_identity", "affiliate.manage_membership"].includes(
+            action,
+          ) &&
+          context.actorKind === actor.actorKind &&
+          context.actorReference === session.subject &&
+          context.correlationId === correlation;
+        return {
+          allowed,
+          decisionReference: allowed ? `self-enrollment:${correlation}` : null,
+        };
+      },
+    };
+    const identity = runtimeDependencies.createIdentity
+      ? runtimeDependencies.createIdentity(pool, authorization)
+      : new (
+          await loadAffiliatesServerModule()
+        ).AffiliateIdentityApplicationService(pool, authorization);
+    let account = initial.account;
+    if (!account) {
+      try {
+        await identity.createAffiliate({
+          actor,
+          affiliateId: `aff_${randomUUID()}`,
+          identityReference: session.subject,
+          pseudonymousReference: `person_${randomUUID()}`,
+          accountType: "person",
+          roleCategory: "other",
+          occurredAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        if (
+          error.message !== "AFFILIATE_ALREADY_EXISTS" &&
+          error.code !== "ER_DUP_ENTRY" &&
+          error.code !== "ER_LOCK_DEADLOCK"
+        )
+          throw error;
+      }
+      account = await accountForIdentity(pool, session.subject);
+      if (!account)
+        return json(
+          response,
+          409,
+          { error: "AFFILIATE_ENROLLMENT_RETRY" },
+          correlation,
+        );
+    }
+    if (
+      account.account_type !== "person" ||
+      account.status !== "active" ||
+      account.fraud_blocked === 1
+    ) {
+      return json(
+        response,
+        409,
+        { error: "AFFILIATE_ACCOUNT_INELIGIBLE" },
+        correlation,
+      );
+    }
+    if (
+      body.programId &&
+      !initial.memberships.some((m) => m.program_id === body.programId)
+    ) {
+      try {
+        await identity.createMembership({
+          actor,
+          membershipId: `membership_${randomUUID()}`,
+          affiliateId: account.affiliate_id,
+          programId: body.programId,
+          destinationId: configuredDestinationId,
+          acceptedTermsVersion: null,
+          occurredAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        if (
+          [
+            "AFFILIATE_PROGRAM_NOT_FOUND",
+            "AFFILIATE_PROGRAM_INACTIVE",
+          ].includes(error.message)
+        ) {
+          return json(
+            response,
+            409,
+            { error: "AFFILIATE_PROGRAM_UNAVAILABLE" },
+            correlation,
+          );
+        }
+        if (
+          error.message !== "AFFILIATE_MEMBERSHIP_DUPLICATE" &&
+          error.code !== "ER_DUP_ENTRY" &&
+          error.code !== "ER_LOCK_DEADLOCK"
+        )
+          throw error;
+      }
+    }
+    const current = await read();
+    if (
+      body.programId &&
+      !current.memberships.some((m) => m.program_id === body.programId)
+    ) {
+      return json(
+        response,
+        409,
+        { error: "AFFILIATE_ENROLLMENT_RETRY" },
+        correlation,
+      );
+    }
+    return json(response, 200, enrollmentView(current, session), correlation);
+  }
+
+  async function authenticatedAccount(
+    request,
+    response,
+    correlation,
+    offerEnrollment = false,
+  ) {
     const session = await authApi.resolveSession(request);
     if (!session) {
       json(response, 401, { error: "AUTH_REQUIRED" }, correlation);
@@ -777,7 +1007,17 @@ export function createAffiliatesApi({
     }
     const account = await accountForIdentity(pool, session.subject);
     if (!account) {
-      json(response, 404, { error: "AFFILIATE_NOT_FOUND" }, correlation);
+      json(
+        response,
+        404,
+        {
+          error:
+            offerEnrollment && authApi.isDesignatedPanelOwner?.(session)
+              ? "AFFILIATE_ENROLLMENT_AVAILABLE"
+              : "AFFILIATE_NOT_FOUND",
+        },
+        correlation,
+      );
       return null;
     }
     return Object.freeze({ session, account });
@@ -788,7 +1028,12 @@ export function createAffiliatesApi({
       json(response, 405, { error: "METHOD_NOT_ALLOWED" }, correlation);
       return;
     }
-    const active = await authenticatedAccount(request, response, correlation);
+    const active = await authenticatedAccount(
+      request,
+      response,
+      correlation,
+      true,
+    );
     if (!active) return;
     response.setHeader("Vary", "Cookie");
     const projection = await commercialProjection(
@@ -800,10 +1045,25 @@ export function createAffiliatesApi({
       json(
         response,
         403,
-        { error: "AFFILIATE_DESTINATION_FORBIDDEN" },
+        {
+          error: authApi.isDesignatedPanelOwner?.(active.session)
+            ? "AFFILIATE_ENROLLMENT_AVAILABLE"
+            : "AFFILIATE_DESTINATION_FORBIDDEN",
+        },
         correlation,
       );
       return;
+    }
+    if (authApi.isDesignatedPanelOwner?.(active.session)) {
+      const enrollment = enrollmentView(
+        {
+          account: active.account,
+          memberships: projection.memberships,
+          programs: await activeEnrollmentPrograms(),
+        },
+        active.session,
+      );
+      return json(response, 200, { ...projection, enrollment }, correlation);
     }
     json(response, 200, projection, correlation);
   }
@@ -1039,6 +1299,19 @@ export function createAffiliatesApi({
           { error: "AFFILIATES_RUNTIME_UNAVAILABLE" },
           correlation,
         );
+        return;
+      }
+      if (requestUrl.pathname === `${affiliatesApiPrefix}/enrollment`) {
+        try {
+          await handleEnrollment(request, response, correlation);
+        } catch {
+          json(
+            response,
+            503,
+            { error: "AFFILIATE_ENROLLMENT_UNAVAILABLE" },
+            correlation,
+          );
+        }
         return;
       }
       if (requestUrl.pathname === `${affiliatesApiPrefix}/me`) {

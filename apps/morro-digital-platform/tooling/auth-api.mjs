@@ -1,3 +1,4 @@
+import { normalizeBusinessId as businessResourceId } from "@touristic/business";
 import { shouldApplyRuntimeSchema } from "./database-schema-mode.mjs";
 import {
   authorizeBusinessAccess,
@@ -218,6 +219,36 @@ export function createAuthApi({ getEnvironmentValue, audit = () => {} }) {
     return (
       users.find((candidate) => candidate.id === String(userId || "").trim()) ??
       null
+    );
+  }
+
+  // The staging owner bootstrap can retain an existing principal ID on rotation.
+  // Resolve its configured identity once, then compare authenticated subjects.
+  const panelOwnerSubject = String(
+    getEnvironmentValue("CONTROL_CENTER_OWNER_PANEL_SUBJECT") || "",
+  ).trim();
+  const stagingOwnerEmail =
+    getEnvironmentValue("RENDER_SERVICE_NAME") === "morro-digital-v2-staging" &&
+    String(getEnvironmentValue("STAGING_CONTROL_CENTER_OWNER_ENABLED"))
+      .trim()
+      .toLowerCase() === "true"
+      ? String(getEnvironmentValue("STAGING_CONTROL_CENTER_OWNER_EMAIL") || "")
+          .trim()
+          .toLowerCase()
+      : "";
+  const designatedOwner = users.find(
+    (user) =>
+      user.role === "PLATFORM_OWNER" &&
+      (panelOwnerSubject
+        ? user.id === panelOwnerSubject
+        : user.email === stagingOwnerEmail),
+  );
+
+  function isDesignatedPanelOwner(session) {
+    return Boolean(
+      designatedOwner &&
+      session?.role === "PLATFORM_OWNER" &&
+      session.subject === designatedOwner.id,
     );
   }
 
@@ -624,6 +655,38 @@ export function createAuthApi({ getEnvironmentValue, audit = () => {} }) {
       return null;
     }
     if (
+      isDesignatedPanelOwner(active) &&
+      businessResourceId(decision.businessId) !== decision.businessId
+    ) {
+      audit(request, {
+        action: auditAction,
+        result: "denied",
+        reason: "ambiguous_business_id",
+        businessId: decision.businessId,
+      });
+      json(response, 409, {
+        error: "BUSINESS_ID_INCOMPATIBLE",
+        message: "O identificador desta empresa precisa ser conciliado.",
+      });
+      return null;
+    }
+    if (
+      isDesignatedPanelOwner(active) &&
+      !users.some((user) => user.businessIds.includes(decision.businessId))
+    ) {
+      audit(request, {
+        action: auditAction,
+        result: "denied",
+        reason: "outside_control_center_directory",
+        businessId: decision.businessId,
+      });
+      json(response, 403, {
+        error: "BUSINESS_ACCESS_DENIED",
+        message: "A empresa não consta no diretório do Control Center.",
+      });
+      return null;
+    }
+    if (
       isPlatformWideAuthRole(active.role) &&
       !active.businessIds.includes(decision.businessId)
     ) {
@@ -859,6 +922,7 @@ export function createAuthApi({ getEnvironmentValue, audit = () => {} }) {
 
   return Object.freeze({
     authorizeBusinessRequest,
+    isDesignatedPanelOwner,
     authorizeMutation,
     consumeAdminMutationAttempt,
     claimAdminMutationReplay,

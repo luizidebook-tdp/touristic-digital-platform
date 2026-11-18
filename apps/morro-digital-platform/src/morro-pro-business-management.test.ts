@@ -77,6 +77,39 @@ describe("Morro Pro business context", () => {
     expect(access.every((item) => !item.visible && !item.mutable)).toBe(true);
   });
 
+  it("restricts the designated owner to the directory and preserves module capabilities", () => {
+    const platformSession = session("PLATFORM_OWNER", ["unlisted"]);
+    expect(() => resolveBusinessContext(platformSession)).toThrow(
+      "MORRO_PRO_ROLE_DENIED",
+    );
+    const directory = ["business-a", "business-b"];
+    const owner = { ...platformSession, ownerDirectoryBusinessIds: directory };
+    const controller = createBusinessContextController(owner);
+    expect(controller.switchTo("business-b").businessId).toBe("business-b");
+    expect(() => controller.switchTo("unlisted")).toThrow(
+      "BUSINESS_ACCESS_DENIED",
+    );
+    const access = resolveMorroProModuleAccess(
+      owner.user.role,
+      undefined,
+      [],
+      directory,
+    );
+    expect(access.find((module) => module.id === "team")?.mutable).toBe(true);
+    expect(access.find((module) => module.id === "financial")?.mutable).toBe(
+      false,
+    );
+    const other = resolveMorroProModuleAccess(
+      "PLATFORM_ADMIN",
+      undefined,
+      [],
+      directory,
+    );
+    expect(other.every((module) => !module.visible && !module.mutable)).toBe(
+      true,
+    );
+  });
+
   it("rejects cross-business switching", () => {
     const controller = createBusinessContextController(
       session("BUSINESS_MANAGER", ["business-a"]),

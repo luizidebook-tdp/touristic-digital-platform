@@ -24,13 +24,13 @@ The portal must never infer ownership from name, slug, destination, label or fro
 
 ## Business context
 
-The browser receives `businessIds[]` from the authenticated session.
+Business users receive `businessIds[]` from the authenticated session.
 
-Only canonical `BUSINESS_OWNER`, `BUSINESS_MANAGER` and `BUSINESS_VIEWER` roles (including their legacy business-role aliases) may enter Morro Pro. Platform roles fail closed with `MORRO_PRO_ROLE_DENIED`; Control Center remains the administrative surface.
+Morro Pro admits canonical `BUSINESS_OWNER`, `BUSINESS_MANAGER` and `BUSINESS_VIEWER` roles and their legacy aliases. The designated Control Center account can also enter with its existing `PLATFORM_OWNER` identity. On each entry, the server checks the designated identity and returns the account subject and business IDs from the same membership directory used by Control Center. The browser verifies the subject before allowing selection. An empty directory displays an empty state. Other platform accounts receive no owner directory access. The business dashboard applies its existing operation-specific capabilities and read-only financial projection.
 
 Rules:
 
-1. explicit requested business not in `businessIds[]` => fail closed with `BUSINESS_ACCESS_DENIED`;
+1. explicit requested business outside the applicable directory or session scope => fail closed with `BUSINESS_ACCESS_DENIED`;
 2. switching only accepts an ID in the authenticated scope;
 3. every switch aborts in-flight requests with an `AbortController`;
 4. each request carries a monotonically increasing generation;

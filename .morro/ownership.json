@@ -205,6 +205,12 @@
     {
       "id": "business",
       "pathPrefixes": [
+        "docs/architecture/MORRO-PRO-BUSINESS-SELF-SERVICE.md",
+        "apps/morro-digital-platform/src/business-dashboard-client.ts",
+        "apps/morro-digital-platform/src/business-dashboard-client.test.ts",
+        "apps/morro-digital-platform/src/business-dashboard-surface.ts",
+        "apps/morro-digital-platform/src/morro-pro-business-management.ts",
+        "apps/morro-digital-platform/src/morro-pro-business-management.test.ts",
         "packages/business/",
         "services/business/",
         "apps/morro-digital-platform/tooling/place-platform-runtime.mjs",

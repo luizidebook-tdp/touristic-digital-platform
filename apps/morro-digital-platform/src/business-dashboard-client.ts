@@ -1,9 +1,11 @@
-import type {
-  DashboardAuthClient,
-  DashboardSessionResponse,
-} from "@touristic/auth-browser";
-import { normalizeBusinessId, type BusinessProfile } from "@touristic/business";
-import { resolveBusinessContext } from "./morro-pro-business-management.js";
+import type { DashboardAuthClient } from "@touristic/auth-browser";
+import { normalizeBusinessId } from "@touristic/auth";
+import type { BusinessProfile } from "@touristic/business";
+import {
+  hasExactBusinessResourceId,
+  resolveBusinessContext,
+  type MorroProSession,
+} from "./morro-pro-business-management.js";
 
 export interface MorroProInventoryOffer {
   readonly id: string;
@@ -186,7 +188,7 @@ export interface MorroProMediaUploadInput {
 }
 
 export interface BusinessDashboardBootstrap {
-  readonly session: DashboardSessionResponse;
+  readonly session: MorroProSession;
   readonly businessId: string;
   readonly profile: BusinessProfile | null;
 }
@@ -276,21 +278,26 @@ export interface BusinessDashboardClient {
   ) => Promise<unknown>;
 }
 
+function exactBusinessResourceId(input: unknown): string {
+  const id = normalizeBusinessId(input);
+  if (!id) throw new Error("INVALID_BUSINESS_ID");
+  if (!hasExactBusinessResourceId(id))
+    throw new Error("BUSINESS_ID_INCOMPATIBLE");
+  return id;
+}
+
 function businessProfileUrl(businessIdInput: unknown): string {
-  const businessId = normalizeBusinessId(businessIdInput);
-  if (!businessId) throw new Error("INVALID_BUSINESS_ID");
+  const businessId = exactBusinessResourceId(businessIdInput);
   return `/api/business/${encodeURIComponent(businessId)}/profile`;
 }
 
 function businessLocationUrl(businessIdInput: unknown, suffix = ""): string {
-  const businessId = normalizeBusinessId(businessIdInput);
-  if (!businessId) throw new Error("INVALID_BUSINESS_ID");
+  const businessId = exactBusinessResourceId(businessIdInput);
   return `/api/business/${encodeURIComponent(businessId)}/location${suffix}`;
 }
 
 function businessInventoryUrl(businessIdInput: unknown): string {
-  const businessId = normalizeBusinessId(businessIdInput);
-  if (!businessId) throw new Error("INVALID_BUSINESS_ID");
+  const businessId = exactBusinessResourceId(businessIdInput);
   return `/api/ticketing/v1/operator/businesses/${encodeURIComponent(businessId)}/inventory`;
 }
 
@@ -299,8 +306,7 @@ function businessMediaUrl(
   mediaId?: string,
   order = false,
 ): string {
-  const businessId = normalizeBusinessId(businessIdInput);
-  if (!businessId) throw new Error("INVALID_BUSINESS_ID");
+  const businessId = exactBusinessResourceId(businessIdInput);
   let url = `/api/business/${encodeURIComponent(businessId)}/media`;
   if (order) url += "/order";
   else if (mediaId) url += `/${encodeURIComponent(mediaId)}`;
@@ -312,8 +318,7 @@ function businessCatalogUrl(
   kind?: MorroProCatalogKind,
   id?: string,
 ): string {
-  const businessId = normalizeBusinessId(businessIdInput);
-  if (!businessId) throw new Error("INVALID_BUSINESS_ID");
+  const businessId = exactBusinessResourceId(businessIdInput);
   let url = `/api/business/${encodeURIComponent(businessId)}/catalog`;
   if (kind) url += `/${encodeURIComponent(kind)}`;
   if (id) url += `/${encodeURIComponent(id)}`;
@@ -694,8 +699,40 @@ export function createBusinessDashboardClient(
   async function bootstrap(
     requestedBusinessId?: unknown,
   ): Promise<BusinessDashboardBootstrap> {
-    const session = await authClient.getSession();
-    if (!session) throw new Error("AUTH_REQUIRED");
+    const authenticated = await authClient.getSession();
+    if (!authenticated) throw new Error("AUTH_REQUIRED");
+    let session: MorroProSession = authenticated;
+    if (authenticated.user.role === "PLATFORM_OWNER") {
+      const directory = await authClient.secureFetch(
+        "/api/admin/v1/businesses?view=owner-dashboard",
+        {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+        },
+      );
+      if (!directory.ok) throw new Error(await readError(directory));
+      const data: unknown = await directory.json();
+      if (
+        !data ||
+        typeof data !== "object" ||
+        !("subject" in data) ||
+        data.subject !== authenticated.user.id ||
+        !("businessIds" in data) ||
+        !Array.isArray(data.businessIds) ||
+        !data.businessIds.every(
+          (id: unknown) =>
+            typeof id === "string" && id === normalizeBusinessId(id),
+        )
+      )
+        throw new Error("MORRO_PRO_ROLE_DENIED");
+      session = Object.freeze({
+        ...authenticated,
+        ownerDirectoryBusinessIds: Object.freeze(data.businessIds),
+      });
+      if (session.ownerDirectoryBusinessIds?.length === 0)
+        throw new Error("MORRO_PRO_DIRECTORY_EMPTY");
+    }
     const businessId = resolveBusinessContext(session, requestedBusinessId);
     const profile = await loadProfile(businessId);
     return Object.freeze({ session, businessId, profile });

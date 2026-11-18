@@ -46,6 +46,7 @@ export interface AffiliateConversionView {
 }
 
 export interface AffiliatePortalProjection {
+  readonly enrollment?: AffiliateEnrollment;
   readonly affiliate: {
     readonly affiliateId: string;
     readonly accountType: "person" | "organization";
@@ -77,7 +78,19 @@ export interface AffiliatePortalBootstrap {
   readonly projection: AffiliatePortalProjection;
 }
 
+export interface AffiliateEnrollment {
+  readonly accountEmail: string;
+  readonly affiliateId: string | null;
+  readonly accountType: "person" | "organization" | null;
+  readonly status: "active" | "inactive" | "suspended" | null;
+  readonly blocked: boolean;
+  readonly programs: readonly string[];
+  readonly membershipCount: number;
+}
+
 export interface AffiliatePortalClient {
+  readonly getEnrollment: () => Promise<AffiliateEnrollment>;
+  readonly enrollPerson: (programId?: string) => Promise<AffiliateEnrollment>;
   readonly bootstrap: () => Promise<AffiliatePortalBootstrap>;
   readonly refresh: () => Promise<AffiliatePortalProjection>;
   readonly issueReferralLink: (
@@ -112,6 +125,34 @@ export function createAffiliatePortalClient(
     }
     currentSession = session;
     return session;
+  }
+
+  async function enrollment(
+    method: "GET" | "POST",
+    programId?: string,
+  ): Promise<AffiliateEnrollment> {
+    const session = await requireSession();
+    const response = await authClient.secureFetch(
+      "/api/affiliates/v1/enrollment",
+      {
+        method,
+        credentials: "same-origin",
+        cache: "no-store",
+        headers:
+          method === "POST"
+            ? {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+                "X-CSRF-Token": session.csrfToken,
+              }
+            : { Accept: "application/json" },
+        ...(method === "POST"
+          ? { body: JSON.stringify({ accountType: "person", programId }) }
+          : {}),
+      },
+    );
+    if (!response.ok) throw new Error(await readError(response));
+    return (await response.json()) as AffiliateEnrollment;
   }
 
   async function refresh(): Promise<AffiliatePortalProjection> {
@@ -174,6 +215,8 @@ export function createAffiliatePortalClient(
 
   return Object.freeze({
     bootstrap,
+    getEnrollment: () => enrollment("GET"),
+    enrollPerson: (programId?: string) => enrollment("POST", programId),
     refresh,
     issueReferralLink,
     logout: () => authClient.logout(),

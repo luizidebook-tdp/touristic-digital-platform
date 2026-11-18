@@ -5,6 +5,7 @@ import {
   type AuthCapability,
   type AuthRole,
 } from "@touristic/auth";
+import { normalizeBusinessId as profileBusinessId } from "@touristic/business";
 import type { DashboardSessionResponse } from "@touristic/auth-browser";
 
 export const morroProModules = Object.freeze([
@@ -143,9 +144,18 @@ export interface MorroProModuleAccess {
     | "owner_only";
 }
 
-function isMorroProBusinessRole(role: AuthRole): boolean {
+export interface MorroProSession extends DashboardSessionResponse {
+  readonly ownerDirectoryBusinessIds?: readonly string[];
+}
+
+function isMorroProBusinessRole(
+  role: AuthRole,
+  ownerDirectoryBusinessIds?: readonly string[],
+): boolean {
   const canonicalRole = canonicalAuthRole(role);
   return (
+    (canonicalRole === "PLATFORM_OWNER" &&
+      ownerDirectoryBusinessIds !== undefined) ||
     canonicalRole === "BUSINESS_OWNER" ||
     canonicalRole === "BUSINESS_MANAGER" ||
     canonicalRole === "BUSINESS_VIEWER"
@@ -156,9 +166,10 @@ export function resolveMorroProModuleAccess(
   role: AuthRole,
   sessionCapabilities: readonly string[] | undefined,
   placeCapabilities: readonly string[] = [],
+  ownerDirectoryBusinessIds?: readonly string[],
 ): readonly MorroProModuleAccess[] {
   const canonicalRole = canonicalAuthRole(role);
-  if (!isMorroProBusinessRole(role)) {
+  if (!isMorroProBusinessRole(role, ownerDirectoryBusinessIds)) {
     return Object.freeze(
       morroProModulePolicies.map((policy) =>
         Object.freeze({
@@ -180,7 +191,11 @@ export function resolveMorroProModuleAccess(
 
   return Object.freeze(
     morroProModulePolicies.map((policy) => {
-      if (policy.ownerOnly && canonicalRole !== "BUSINESS_OWNER") {
+      if (
+        policy.ownerOnly &&
+        canonicalRole !== "BUSINESS_OWNER" &&
+        canonicalRole !== "PLATFORM_OWNER"
+      ) {
         return Object.freeze({
           id: policy.id,
           label: policy.label,
@@ -226,21 +241,32 @@ export function resolveMorroProModuleAccess(
   );
 }
 
+export function hasExactBusinessResourceId(id: string): boolean {
+  return profileBusinessId(id) === id;
+}
+
 export function normalizedBusinessScopes(
-  session: DashboardSessionResponse,
+  session: MorroProSession,
 ): readonly string[] {
+  const ids =
+    canonicalAuthRole(session.user.role) === "PLATFORM_OWNER"
+      ? (session.ownerDirectoryBusinessIds ?? [])
+      : session.user.businessIds;
   return Object.freeze([
-    ...new Set(
-      session.user.businessIds.map(normalizeBusinessId).filter(Boolean),
-    ),
+    ...new Set(ids.map(normalizeBusinessId).filter(Boolean)),
   ] as string[]);
 }
 
 export function resolveBusinessContext(
-  session: DashboardSessionResponse,
+  session: MorroProSession,
   requestedBusinessId?: unknown,
 ): string {
-  if (!isMorroProBusinessRole(session.user.role)) {
+  if (
+    !isMorroProBusinessRole(
+      session.user.role,
+      session.ownerDirectoryBusinessIds,
+    )
+  ) {
     throw new Error("MORRO_PRO_ROLE_DENIED");
   }
   const allowed = normalizedBusinessScopes(session);
@@ -248,10 +274,13 @@ export function resolveBusinessContext(
   if (requestedBusinessId !== undefined && requestedBusinessId !== null) {
     if (!requested) throw new Error("INVALID_BUSINESS_ID");
     if (!allowed.includes(requested)) throw new Error("BUSINESS_ACCESS_DENIED");
+    if (!hasExactBusinessResourceId(requested))
+      throw new Error("BUSINESS_ID_INCOMPATIBLE");
     return requested;
   }
-  if (allowed.length === 1) return allowed[0]!;
-  if (allowed.length > 1) return allowed[0]!;
+  const first = allowed.find(hasExactBusinessResourceId);
+  if (first) return first;
+  if (allowed.length) throw new Error("BUSINESS_ID_INCOMPATIBLE");
   throw new Error("BUSINESS_SCOPE_REQUIRED");
 }
 
@@ -273,7 +302,7 @@ export interface BusinessContextController {
 }
 
 export function createBusinessContextController(
-  session: DashboardSessionResponse,
+  session: MorroProSession,
   initialBusinessId?: unknown,
 ): BusinessContextController {
   const allowed = normalizedBusinessScopes(session);
@@ -297,6 +326,8 @@ export function createBusinessContextController(
       if (!businessId) throw new Error("INVALID_BUSINESS_ID");
       if (!allowed.includes(businessId))
         throw new Error("BUSINESS_ACCESS_DENIED");
+      if (!hasExactBusinessResourceId(businessId))
+        throw new Error("BUSINESS_ID_INCOMPATIBLE");
       controller.abort("business-context-switch");
       controller = new AbortController();
       generation += 1;

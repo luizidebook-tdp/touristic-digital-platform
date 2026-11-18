@@ -111,6 +111,33 @@ describe("affiliate portal browser client", () => {
     );
   });
 
+  it("submits only personal enrollment and program selection with the authenticated CSRF token", async () => {
+    const secureFetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ membershipCount: 1 })));
+    const client = createAffiliatePortalClient({
+      getSession: vi.fn().mockResolvedValue(session),
+      secureFetch,
+      logout: vi.fn(),
+      login: vi.fn(),
+    });
+    await client.enrollPerson("morro-program");
+    expect(secureFetch).toHaveBeenCalledWith(
+      "/api/affiliates/v1/enrollment",
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "X-CSRF-Token": session.csrfToken,
+        },
+        body: JSON.stringify({
+          accountType: "person",
+          programId: "morro-program",
+        }),
+      }),
+    );
+  });
   it("issues a referral link without browser monetary authority", async () => {
     const secureFetch = vi.fn().mockResolvedValue(
       new Response(
