@@ -4,7 +4,7 @@
   "objective": "remediate-picomatch-cve-2026-112366-with-transparent-vendored-fork-reproducible-source-provenance-and-unchanged-security-gates",
   "baseSha": "d178754eecf431ba08b731e0351c90701454ebbb",
   "branch": "chore/acquire-picomatch-remediation-20261117",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {

@@ -13,6 +13,7 @@ overrides:
   source-map-js: 1.2.2
   vite: 7.3.7
   vitest: 4.1.12
+  picomatch: file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz
 
 importers:
   .:
@@ -934,6 +935,15 @@ packages:
         integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==,
       }
 
+  "@tdp/picomatch-secure@file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz":
+    resolution:
+      {
+        integrity: sha512-83L/wBmnr0L+6YYKgoIvEO3fw2wbTJq98rd6YouHd7PEgKyki32j9JVYNCYOJDdT7xTWRQcc6QMbZEQK62nzvQ==,
+        tarball: file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz,
+      }
+    version: 4.0.7
+    engines: { node: ">=12" }
+
   "@turbo/darwin-64@2.10.8":
     resolution:
       {
@@ -1463,6 +1473,7 @@ packages:
       {
         integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==,
       }
+    version: 6.5.0
     engines: { node: ">=12.0.0" }
     peerDependencies:
       picomatch: ^3 || ^4
@@ -1773,13 +1784,6 @@ packages:
       {
         integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==,
       }
-
-  picomatch@4.0.5:
-    resolution:
-      {
-        integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==,
-      }
-    engines: { node: ">=12" }
 
   postcss-calc@11.2.3:
     resolution:
@@ -2350,6 +2354,9 @@ snapshots:
 
   "@standard-schema/spec@1.1.0": {}
 
+  "@tdp/picomatch-secure@file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz":
+    {}
+
   "@turbo/darwin-64@2.10.8":
     optional: true
 
@@ -2716,9 +2723,9 @@ snapshots:
 
   fast-levenshtein@2.0.6: {}
 
-  fdir@6.5.0(picomatch@4.0.5):
+  fdir@6.5.0(@tdp/picomatch-secure@file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz):
     optionalDependencies:
-      picomatch: 4.0.5
+      picomatch: "@tdp/picomatch-secure@file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz"
 
   file-entry-cache@8.0.0:
     dependencies:
@@ -2868,8 +2875,6 @@ snapshots:
 
   picocolors@1.1.1: {}
 
-  picomatch@4.0.5: {}
-
   postcss-calc@11.2.3(postcss@8.5.29):
     dependencies:
       "@csstools/css-tokenizer": 4.0.2
@@ -2959,8 +2964,8 @@ snapshots:
 
   tinyglobby@0.2.17:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
+      fdir: 6.5.0(@tdp/picomatch-secure@file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz)
+      picomatch: "@tdp/picomatch-secure@file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz"
 
   tinyrainbow@3.1.1: {}
 
@@ -3009,8 +3014,8 @@ snapshots:
   vite@7.3.7(@types/node@24.13.3):
     dependencies:
       esbuild: 0.28.1
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
+      fdir: 6.5.0(@tdp/picomatch-secure@file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz)
+      picomatch: "@tdp/picomatch-secure@file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz"
       postcss: 8.5.25
       rollup: 4.62.4
       tinyglobby: 0.2.17
@@ -3032,7 +3037,7 @@ snapshots:
       magic-string: 0.30.21
       obug: 2.2.1
       pathe: 2.0.3
-      picomatch: 4.0.5
+      picomatch: "@tdp/picomatch-secure@file:tooling/quality/vendor/picomatch/tdp-picomatch-secure-4.0.7-tdp.1.tgz"
       std-env: 4.2.0
       tinybench: 2.9.0
       tinyexec: 1.3.1
