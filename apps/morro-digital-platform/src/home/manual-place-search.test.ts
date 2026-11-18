@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { createManualPlaceSearch } from "./manual-place-search.js";
+import {
+  createManualPlaceSearch,
+  manualSearchResultLabel,
+} from "./manual-place-search.js";
+import { getShellPresentationCopy } from "../runtime/shell-v1-i18n.js";
 import { createPublicPlaceMapClient } from "../map/public-place-map-client-v2.js";
 const place = (id: string, name: string) => ({
   id,
@@ -9,6 +13,11 @@ const place = (id: string, name: string) => ({
   lng: -38.92,
   presentation: { markerKey: "beaches", priority: 1 },
 });
+const segundaPraia = {
+  ...place("public-beach", "Segunda Praia"),
+  lat: -13.3800508,
+  lng: -38.9118443,
+};
 function client(pages: unknown[]) {
   const requests: string[] = [];
   const fetcher = vi.fn(async (url: string) => {
@@ -59,6 +68,122 @@ describe("manual search without an assistant or AI endpoint", () => {
         (item) => !item.placeId && item.source === "local",
       ),
     ).toBe(true);
+  });
+  it("finds an exact mapped beach after a complete public response without inventing a place ID", async () => {
+    const snapshot = await client([{ items: [], nextCursor: null }]).search(
+      "2a praia",
+    );
+    expect(snapshot.source).toBe("map");
+    expect(snapshot.results).toHaveLength(1);
+    expect(snapshot.results[0]).toMatchObject({
+      name: "Segunda Praia",
+      category: "beaches",
+      source: "local",
+    });
+    expect(snapshot.results[0]?.placeId).toBeUndefined();
+  });
+  it("keeps the published beach identity for a catalog alias", async () => {
+    const snapshot = await client([
+      { items: [segundaPraia], nextCursor: null },
+    ]).search("2a praia");
+    expect(snapshot.source).toBe("canonical");
+    expect(snapshot.results.map((row) => row.placeId)).toEqual([
+      "public-beach",
+    ]);
+  });
+  it("keeps a business with the same name separate from a mapped beach", async () => {
+    const business = {
+      ...place("restaurant", "Segunda Praia"),
+      category: "restaurants",
+    };
+    const snapshot = await client([
+      { items: [business], nextCursor: null },
+    ]).search("Segunda Praia");
+    expect(snapshot.results.map((row) => [row.category, row.placeId])).toEqual([
+      ["beaches", undefined],
+      ["restaurants", "restaurant"],
+    ]);
+  });
+  it("does not transfer a catalog alias to a published homonym at another point", async () => {
+    const other = place("other-beach", "Segunda Praia");
+    const alias = await client([{ items: [other], nextCursor: null }]).search(
+      "second beach",
+    );
+    expect(alias.source).toBe("map");
+    expect(alias.results[0]).toMatchObject({
+      source: "local",
+      latitude: segundaPraia.lat,
+      longitude: segundaPraia.lng,
+    });
+    const byName = await client([{ items: [other], nextCursor: null }]).search(
+      "Segunda Praia",
+    );
+    expect(byName.results.map((row) => row.placeId)).toEqual([
+      undefined,
+      "other-beach",
+    ]);
+    expect(
+      byName.results.map((row) =>
+        manualSearchResultLabel(row, byName.results, "pt"),
+      ),
+    ).toEqual([
+      "Segunda Praia · Praias · -13.3800508, -38.9118443",
+      "Segunda Praia · Praias · -13.38, -38.92",
+    ]);
+  });
+  it("preserves distinct published IDs when matching coordinates do not identify a unique profile", async () => {
+    const records = [
+      segundaPraia,
+      { ...segundaPraia, id: "another-public-beach" },
+    ];
+    const snapshot = await client([
+      { items: records, nextCursor: null },
+    ]).search("Segunda Praia");
+    expect(snapshot.results.map((row) => row.placeId)).toEqual([
+      undefined,
+      "public-beach",
+      "another-public-beach",
+    ]);
+    const labels = snapshot.results.map((row) =>
+      manualSearchResultLabel(row, snapshot.results, "pt"),
+    );
+    expect(new Set(labels).size).toBe(3);
+  });
+  it.each(["pt", "en", "es", "he"])(
+    "disambiguates homonyms using the same category labels as the map in %s",
+    async (locale) => {
+      const restaurant = {
+        ...segundaPraia,
+        id: "business",
+        category: "restaurants",
+      };
+      const snapshot = await client([
+        { items: [restaurant], nextCursor: null },
+      ]).search("Segunda Praia");
+      const labels = getShellPresentationCopy(locale).assistantCategoryLabels;
+      expect(
+        snapshot.results.map((row) =>
+          manualSearchResultLabel(row, snapshot.results, locale),
+        ),
+      ).toEqual([
+        `Segunda Praia · ${labels.beaches}`,
+        `Segunda Praia · ${labels.restaurants}`,
+      ]);
+      expect(
+        manualSearchResultLabel(
+          snapshot.results[0]!,
+          [snapshot.results[0]!],
+          locale,
+        ),
+      ).toBe("Segunda Praia");
+    },
+  );
+  it("respects the selected category for an exact mapped beach", async () => {
+    const snapshot = await client([{ items: [], nextCursor: null }]).search(
+      "Segunda Praia",
+      "restaurants",
+    );
+    expect(snapshot).toEqual({ source: "canonical", results: [] });
   });
   it("rejects an aborted request rather than disguising cancellation as fallback", async () => {
     const abort = new AbortController();
