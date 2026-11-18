@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-MAPPED-BEACH-SEARCH-GESTURE-20261118",
+  "objective": "preserve-mapped-beach-discovery-and-prove-pointer-pan-after-home-startup-overlay-releases-input",
+  "baseSha": "89a970af081436269830f6cbb71f67077be7edb4",
+  "branch": "fix/mapped-beach-search-gesture-20261118",
+  "state": "IMPLEMENTING",
+  "risk": "high",
+  "scope": "DESTINATION:MORRO",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-MAPPED-BEACH-SEARCH-GESTURE-20261118.json",
+      "apps/morro-digital-platform/src/home/home-discover-navigation.ts",
+      "apps/morro-digital-platform/src/home/manual-place-search.test.ts",
+      "apps/morro-digital-platform/src/home/manual-place-search.ts",
+      "apps/morro-digital-platform/tooling/wave-a-pan-gesture.mjs",
+      "apps/morro-digital-platform/tooling/wave-a-pan-gesture.test.mjs"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity",
+    "home-discover-real-mapbox"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "dependencies",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 600
+    },
+    "commands": [
+      {
+        "id": "map-path-ownership",
+        "argv": ["node", "--test", "tooling/fabric/ownership-path.test.mjs"],
+        "timeoutSeconds": 600
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity",
+      "home-discover-real-mapbox"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
