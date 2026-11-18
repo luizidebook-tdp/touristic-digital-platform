@@ -260,7 +260,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "fix/owner-panel-impact-20261118",
-      "baseSha": "89a970af081436269830f6cbb71f67077be7edb4",
+      "baseSha": "4ae80f622f432a1f2561164feb8da328f4384474",
       "paths": [
         ".morro/changesets/MD-OWNER-PANEL-IMPACT-20261118.json",
         "tooling/ci/test-impact-manifest.json",
