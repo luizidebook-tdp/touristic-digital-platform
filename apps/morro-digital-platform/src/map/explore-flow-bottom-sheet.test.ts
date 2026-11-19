@@ -61,9 +61,34 @@ class FixtureElement {
     return this.children.length;
   }
 
+  get firstChild(): FixtureElement | null {
+    return this.children[0] ?? null;
+  }
+
+  get parentElement(): FixtureElement | undefined {
+    return this.parent;
+  }
+
   appendChild(child: FixtureElement): FixtureElement {
+    child.parent?.replaceChildren(
+      ...child.parent.children.filter((node) => node !== child),
+    );
     child.parent = this;
     this.children.push(child);
+    return child;
+  }
+
+  insertBefore(
+    child: FixtureElement,
+    reference: FixtureElement | null,
+  ): FixtureElement {
+    child.parent?.replaceChildren(
+      ...child.parent.children.filter((node) => node !== child),
+    );
+    child.parent = this;
+    const index = reference ? this.children.indexOf(reference) : -1;
+    if (index < 0) this.children.push(child);
+    else this.children.splice(index, 0, child);
     return child;
   }
 
@@ -103,6 +128,10 @@ class FixtureElement {
   addEventListener(name: string, callback: (event?: unknown) => void): void {
     this.listeners.set(name, callback);
   }
+
+  setPointerCapture(): void {}
+
+  releasePointerCapture(): void {}
 
   focus(): void {}
 
@@ -158,6 +187,15 @@ const sheetOf = (document: FixtureDocument): FixtureElement =>
 const statusOf = (document: FixtureDocument): FixtureElement =>
   elementWithClass(document.body.descendants(), "explore-flow-sheet-status")!;
 
+const toolbarOf = (document: FixtureDocument): FixtureElement =>
+  elementWithClass(document.body.descendants(), "explore-flow-sheet-toolbar")!;
+
+const stateControlsOf = (document: FixtureDocument): FixtureElement =>
+  elementWithClass(
+    document.body.descendants(),
+    "explore-flow-sheet-state-controls",
+  )!;
+
 const visibleText = (node: FixtureElement): string =>
   [node.textContent, ...node.descendants().map((child) => child.textContent)]
     .filter(Boolean)
@@ -178,6 +216,110 @@ const show = (
 };
 
 describe("explore flow bottom sheet states", () => {
+  it("binds one toolbar to the unified dock without moving the contextual source", () => {
+    const document = createDocument();
+    const controller = installExploreFlowBottomSheet({ document });
+    const dock = new FixtureElement("section");
+    const source = new FixtureElement("div");
+    document.body.appendChild(dock);
+    document.body.appendChild(source);
+    controller.bindDock(dock as unknown as HTMLElement);
+    controller.showContextualControls({
+      accessibleLabel: "Resultados",
+      contextKey: "places:beaches",
+      initialState: "half",
+      onDismiss: () => {},
+    });
+
+    expect(toolbarOf(document).parent).toBe(dock);
+    expect(dock.dataset.exploreSheetState).toBe("half");
+    expect(sheetOf(document).classList.contains("hidden")).toBe(true);
+    expect(source.parent).toBe(document.body);
+    expect(sheetOf(document).children).not.toContain(source);
+    expect(
+      stateControlsOf(document).children.map((button) =>
+        button.getAttribute("aria-label"),
+      ),
+    ).toEqual([
+      "Mostrar resumo",
+      "Mostrar conteúdo principal",
+      "Expandir painel",
+    ]);
+
+    controller.hide();
+    expect(toolbarOf(document).parent).toBe(sheetOf(document));
+    expect(toolbarOf(document).hidden).toBe(true);
+    expect(dock.dataset.exploreSheetState).toBeUndefined();
+    controller.destroy();
+  });
+
+  it("keeps button and drag transitions in parity and publishes the dock state", () => {
+    const document = createDocument();
+    const onStateChange = vi.fn();
+    const controller = installExploreFlowBottomSheet({
+      document,
+      onStateChange,
+    });
+    const dock = new FixtureElement("section");
+    document.body.appendChild(dock);
+    controller.bindDock(dock as unknown as HTMLElement);
+    controller.showContextualControls({
+      accessibleLabel: "Resultados",
+      contextKey: "places:beaches",
+      initialState: "peek",
+      onDismiss: () => {},
+    });
+
+    const controls = stateControlsOf(document);
+    const full = controls.children[2]!;
+    full.listeners.get("click")!();
+    expect(controller.getState()).toBe("full");
+    expect(dock.dataset.exploreSheetState).toBe("full");
+    expect(
+      controls.children.map((button) => button.getAttribute("aria-pressed")),
+    ).toEqual(["false", "false", "true"]);
+
+    const handle = elementWithClass(
+      document.body.descendants(),
+      "explore-flow-sheet-drag-handle",
+    )!;
+    handle.listeners.get("pointerdown")!({
+      clientY: 200,
+      pointerId: 7,
+    });
+    handle.listeners.get("pointerup")!({
+      clientY: 150,
+      pointerId: 7,
+    });
+    expect(controller.getState()).toBe("full");
+    handle.listeners.get("pointerdown")!({
+      clientY: 150,
+      pointerId: 8,
+    });
+    handle.listeners.get("pointerup")!({
+      clientY: 190,
+      pointerId: 8,
+    });
+    expect(controller.getState()).toBe("half");
+    handle.listeners.get("pointerdown")!({
+      clientY: 190,
+      pointerId: 9,
+    });
+    controller.hide();
+    handle.listeners.get("pointerup")!({
+      clientY: 100,
+      pointerId: 9,
+    });
+    expect(controller.getState()).toBe("half");
+    expect(onStateChange).toHaveBeenCalledWith("full");
+    expect(onStateChange).toHaveBeenCalledWith("half");
+
+    const toolbar = toolbarOf(document);
+    controller.destroy();
+    expect(dock.dataset.exploreSheetState).toBeUndefined();
+    expect(document.body.descendants()).not.toContain(toolbar);
+  });
+
   it("names the failure plainly and keeps the preserved-filter hint", () => {
     const document = createDocument();
     const controller = installExploreFlowBottomSheet({ document });

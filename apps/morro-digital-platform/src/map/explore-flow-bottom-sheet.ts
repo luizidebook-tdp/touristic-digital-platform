@@ -16,7 +16,18 @@ export interface ExploreFlowBottomSheetPresentation {
   readonly onDismiss: () => void;
 }
 
+export interface ExploreFlowBottomSheetContextualControls {
+  readonly accessibleLabel: string;
+  readonly contextKey?: string;
+  readonly initialState?: ExploreFlowBottomSheetState;
+  readonly onDismiss: () => void;
+}
+
 export interface ExploreFlowBottomSheetController {
+  bindDock(dock: HTMLElement): void;
+  showContextualControls(
+    presentation: ExploreFlowBottomSheetContextualControls,
+  ): void;
   show(presentation: ExploreFlowBottomSheetPresentation): void;
   hide(): void;
   setState(state: ExploreFlowBottomSheetState): void;
@@ -31,10 +42,12 @@ export interface ExploreFlowBottomSheetController {
 
 export interface ExploreFlowBottomSheetOptions {
   readonly document: Document;
+  readonly onStateChange?: (state: ExploreFlowBottomSheetState) => void;
 }
 
 type SheetCopy = Readonly<{
   close: string;
+  statesGroup: string;
   loading: string;
   empty: string;
   unavailable: string;
@@ -45,6 +58,7 @@ type SheetCopy = Readonly<{
 const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
   pt: {
     close: "Fechar painel",
+    statesGroup: "Estados do painel",
     loading: "Atualizando o mapa e os resultados…",
     empty: "Nenhum resultado encontrado para este filtro.",
     unavailable:
@@ -59,6 +73,7 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
   },
   en: {
     close: "Close panel",
+    statesGroup: "Panel states",
     loading: "Updating the map and results…",
     empty: "No results were found for this filter.",
     unavailable:
@@ -73,6 +88,7 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
   },
   es: {
     close: "Cerrar panel",
+    statesGroup: "Estados del panel",
     loading: "Actualizando el mapa y los resultados…",
     empty: "No se encontraron resultados para este filtro.",
     unavailable:
@@ -87,6 +103,7 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
   },
   he: {
     close: "סגירת הלוח",
+    statesGroup: "מצבי הלוח",
     loading: "מעדכן את המפה והתוצאות…",
     empty: "לא נמצאו תוצאות למסנן הזה.",
     unavailable: "לא ניתן לעדכן את המפה כרגע. המסננים שלך נשמרו.",
@@ -133,11 +150,15 @@ function createStateButton(
   button.className = "md-icon-button explore-flow-sheet-state-button";
   button.dataset.sheetStateTarget = state;
   button.setAttribute("aria-label", copy.states[state]);
+  button.setAttribute("aria-pressed", "false");
   button.title = copy.states[state];
   button.textContent = stateGlyph[state];
   return button;
 }
 
+// Kept as a compatibility helper for older structural consumers. The active
+// Explore surface uses the three explicit state buttons above so pointer and
+// keyboard activation have identical transitions.
 function createStepButton(
   document: Document,
   direction: "up" | "down",
@@ -158,10 +179,13 @@ function createStepButton(
 
 export function installExploreFlowBottomSheet({
   document,
+  onStateChange,
 }: ExploreFlowBottomSheetOptions): ExploreFlowBottomSheetController {
   let destroyed = false;
   const featureStyles = createFeatureStyleGate(document);
   let state: ExploreFlowBottomSheetState = "half";
+  let boundDock: HTMLElement | undefined;
+  let activeContextKey: string | undefined;
   const sheet = document.createElement("aside");
   sheet.id = "explore-flow-bottom-sheet";
   sheet.className = "md-bottom-sheet md-card explore-flow-bottom-sheet hidden";
@@ -171,6 +195,7 @@ export function installExploreFlowBottomSheet({
 
   const toolbar = document.createElement("div");
   toolbar.className = "explore-flow-sheet-toolbar";
+  toolbar.dataset.exploreSheetToolbar = "true";
 
   const handle = document.createElement("div");
   handle.className = "md-bottom-sheet-handle explore-flow-sheet-drag-handle";
@@ -222,7 +247,33 @@ export function installExploreFlowBottomSheet({
       "explore-flow-message-compat-source",
     );
     compatibilityMessageSource.removeAttribute("aria-hidden");
+    compatibilityMessageSource.removeAttribute("inert");
     compatibilityMessageSource = undefined;
+  };
+
+  const clearDockProjection = (): void => {
+    if (!boundDock) return;
+    delete boundDock.dataset.exploreSheetState;
+    delete boundDock.dataset.exploreSheetKind;
+    boundDock.removeAttribute("data-explore-sheet-label");
+  };
+
+  const restoreToolbarHome = (): void => {
+    if (toolbar.parentElement !== sheet || sheet.firstChild !== toolbar)
+      sheet.insertBefore(toolbar, sheet.firstChild);
+    toolbar.hidden = true;
+    close.hidden = false;
+  };
+
+  const moveToolbarToDock = (): void => {
+    if (!boundDock) return;
+    if (toolbar.parentElement !== boundDock) {
+      boundDock.insertBefore(toolbar, boundDock.firstChild);
+    }
+    toolbar.hidden = false;
+    // The contextual rail already owns the visible back/close affordance. Keep
+    // the existing close listener for the dedicated tour surface only.
+    close.hidden = true;
   };
 
   const setStatus = (
@@ -275,8 +326,13 @@ export function installExploreFlowBottomSheet({
 
   const setState = (nextState: ExploreFlowBottomSheetState): void => {
     if (destroyed) return;
+    const changed = state !== nextState;
     state = nextState;
     sheet.dataset.sheetState = nextState;
+    if (activeKind === "explore" && boundDock) {
+      boundDock.dataset.exploreSheetState = nextState;
+      boundDock.dataset.exploreSheetKind = "explore";
+    }
     const order: readonly ExploreFlowBottomSheetState[] = [
       "peek",
       "half",
@@ -295,10 +351,18 @@ export function installExploreFlowBottomSheet({
         child.setAttribute("aria-pressed", String(target === nextState));
       }
     }
+    if (changed) onStateChange?.(nextState);
   };
 
   let dragStartY: number | null = null;
   let dragPointerId: number | null = null;
+  const resetDrag = (): void => {
+    if (dragPointerId !== null) {
+      handle.releasePointerCapture?.(dragPointerId);
+    }
+    dragStartY = null;
+    dragPointerId = null;
+  };
   const dragStep = (direction: "up" | "down"): void => {
     const order: readonly ExploreFlowBottomSheetState[] = [
       "peek",
@@ -312,27 +376,28 @@ export function installExploreFlowBottomSheet({
     if (next) setState(next);
   };
   handle.addEventListener("pointerdown", (event) => {
-    if (activeKind !== "explore") return;
-    dragStartY = event.clientY;
-    dragPointerId = event.pointerId;
-    handle.setPointerCapture?.(event.pointerId);
+    if (destroyed || activeKind !== "explore") return;
+    const pointer = event as PointerEvent;
+    resetDrag();
+    dragStartY = pointer.clientY;
+    dragPointerId = pointer.pointerId;
+    handle.setPointerCapture?.(pointer.pointerId);
   });
   handle.addEventListener("pointerup", (event) => {
-    if (dragStartY === null || dragPointerId !== event.pointerId) return;
-    const delta = event.clientY - dragStartY;
-    dragStartY = null;
-    dragPointerId = null;
+    const pointer = event as PointerEvent;
+    if (dragStartY === null || dragPointerId !== pointer.pointerId) return;
+    const delta = pointer.clientY - dragStartY;
+    resetDrag();
     if (Math.abs(delta) < 36) return;
     dragStep(delta < 0 ? "up" : "down");
   });
-  handle.addEventListener("pointercancel", () => {
-    dragStartY = null;
-    dragPointerId = null;
-  });
+  handle.addEventListener("pointercancel", resetDrag);
+  handle.addEventListener("lostpointercapture", resetDrag);
 
   const rebuildStateControls = (kind: ExploreFlowBottomSheetKind): void => {
     const copy = currentCopy(document);
     stateControls.replaceChildren();
+    stateControls.setAttribute("aria-label", copy.statesGroup);
     if (kind === "tour") {
       for (const target of ["peek", "half", "full"] as const) {
         const button = createStateButton(document, target, copy);
@@ -340,9 +405,11 @@ export function installExploreFlowBottomSheet({
         stateControls.appendChild(button);
       }
     } else {
-      for (const direction of ["down", "up"] as const) {
-        const button = createStepButton(document, direction, copy);
-        button.addEventListener("click", () => dragStep(direction));
+      // Explore uses explicit three-state buttons as the keyboard alternative
+      // to the same 36px-threshold drag gesture.
+      for (const target of ["peek", "half", "full"] as const) {
+        const button = createStateButton(document, target, copy);
+        button.addEventListener("click", () => setState(target));
         stateControls.appendChild(button);
       }
     }
@@ -360,8 +427,10 @@ export function installExploreFlowBottomSheet({
         "explore-flow-message-compat-source",
       );
       compatibilityMessageSource.setAttribute("aria-hidden", "true");
+      compatibilityMessageSource.setAttribute("inert", "");
     }
     activeKind = presentation.kind;
+    activeContextKey = undefined;
     rebuildStateControls(presentation.kind);
     sheet.dataset.flowKind = presentation.kind;
     heading.textContent = presentation.accessibleLabel;
@@ -377,9 +446,27 @@ export function installExploreFlowBottomSheet({
       richContent.appendChild(presentation.content);
     }
     richContent.classList.toggle("hidden", richContent.childElementCount === 0);
+
+    const sourceBelongsToDock =
+      presentation.kind === "explore" && Boolean(boundDock);
+    if (sourceBelongsToDock) {
+      moveToolbarToDock();
+      presentation.source.classList.add("explore-flow-sheet-source");
+      presentation.source.setAttribute("aria-hidden", "true");
+      presentation.source.setAttribute("inert", "");
+      sheet.classList.add("hidden");
+      sheet.setAttribute("aria-hidden", "true");
+      return;
+    }
+
+    clearDockProjection();
+    restoreToolbarHome();
+    toolbar.hidden = false;
+    close.hidden = false;
     actions.replaceChildren(presentation.source);
     presentation.source.classList.add("explore-flow-sheet-source");
     presentation.source.removeAttribute("aria-hidden");
+    presentation.source.removeAttribute("inert");
     for (const button of Array.from(
       presentation.source.querySelectorAll<HTMLButtonElement>(
         ".assistant-option-btn",
@@ -403,18 +490,61 @@ export function installExploreFlowBottomSheet({
   close.addEventListener("click", () => dismissHandler?.());
 
   return Object.freeze({
+    bindDock(dock: HTMLElement): void {
+      if (destroyed) return;
+      if (boundDock && boundDock !== dock) {
+        delete boundDock.dataset.exploreSheetState;
+        delete boundDock.dataset.exploreSheetKind;
+        boundDock.removeAttribute("data-explore-sheet-label");
+      }
+      boundDock = dock;
+      if (activeKind === "explore") moveToolbarToDock();
+    },
+    showContextualControls(
+      presentation: ExploreFlowBottomSheetContextualControls,
+    ): void {
+      if (destroyed) return;
+      featureStyles.run(() => {
+        if (destroyed) return;
+        const nextContextKey = presentation.contextKey;
+        const sameContext =
+          activeKind === "explore" && activeContextKey === nextContextKey;
+        dismissHandler = presentation.onDismiss;
+        activeKind = "explore";
+        activeContextKey = nextContextKey;
+        sheet.dataset.flowKind = "explore";
+        sheet.setAttribute("aria-hidden", "true");
+        sheet.classList.add("hidden");
+        rebuildStateControls("explore");
+        moveToolbarToDock();
+        if (!sameContext && presentation.initialState) {
+          setState(presentation.initialState);
+        } else if (boundDock) {
+          boundDock.dataset.exploreSheetState = state;
+          boundDock.dataset.exploreSheetKind = "explore";
+        }
+        boundDock?.setAttribute(
+          "data-explore-sheet-label",
+          presentation.accessibleLabel,
+        );
+      }, resetDrag);
+    },
     show(presentation: ExploreFlowBottomSheetPresentation): void {
       if (destroyed) return;
       featureStyles.run(() => {
         if (!destroyed) render(presentation);
-      });
+      }, resetDrag);
     },
     hide(): void {
       featureStyles.cancel();
+      resetDrag();
       if (destroyed) return;
       dismissHandler = undefined;
       activeKind = undefined;
+      activeContextKey = undefined;
       clearCompatibilityMessageSource();
+      clearDockProjection();
+      restoreToolbarHome();
       sheet.classList.add("hidden");
       sheet.setAttribute("aria-hidden", "true");
       delete sheet.dataset.flowKind;
@@ -426,11 +556,15 @@ export function installExploreFlowBottomSheet({
     setStatus,
     destroy(): void {
       featureStyles.cancel();
+      resetDrag();
       if (destroyed) return;
       clearCompatibilityMessageSource();
+      clearDockProjection();
       destroyed = true;
       dismissHandler = undefined;
       activeKind = undefined;
+      activeContextKey = undefined;
+      toolbar.remove();
       sheet.remove();
     },
   });

@@ -52,6 +52,7 @@ import {
 import { groupProjectedMarkers } from "./explore-marker-grouping.js";
 import { getV1ExplorePlaceActionOptions } from "./explore-location-actions-v1.js";
 import { getV1ExploreLabel, getV1ExploreUiCopy } from "./explore-v1-i18n.js";
+import { installExploreFlowBottomSheet } from "./explore-flow-bottom-sheet.js";
 
 const EXPECTED_CATEGORY_COUNTS = Object.freeze({
   beaches: 8,
@@ -66,6 +67,20 @@ const EXPECTED_CATEGORY_COUNTS = Object.freeze({
 });
 
 describe("V1 explore locations control", () => {
+  it("activates the same dock state surface for filters, places and detail", () => {
+    const source = readFileSync(
+      new URL("./explore-locations-control.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("bindDock(unifiedAssistantDock)");
+    expect(source).toContain("showContextualControls");
+    expect(source).toContain('activeStage === "detail"');
+    expect(source).toContain('initialState: "half"');
+    expect(source).toContain('container.setAttribute("aria-hidden", "true")');
+    expect(source).toContain('container.setAttribute("inert", "")');
+  });
+
   it("exposes the nine frozen location categories in canonical menu order", () => {
     const categories = getExploreLocationsCategories();
 
@@ -465,6 +480,20 @@ interface PlaceDetailConsumer {
     pitch: number;
     bearing: number;
   };
+  dock(): HTMLElement;
+  sheetStateButtons(): HTMLButtonElement[];
+  sheetHandle(): HTMLElement;
+  sheetSource(): HTMLElement | null;
+  clickSheetState(state: "peek" | "half" | "full"): void;
+  sheetPointerDown(clientY: number, pointerId: number): void;
+  sheetPointerUp(clientY: number, pointerId: number): void;
+  contextualControls(): ReadonlyArray<{
+    accessibleLabel: string;
+    contextKey?: string;
+    initialState?: string;
+  }>;
+  sheetStates(): string[];
+  stateEvents(): Array<{ type: string; detail: Record<string, unknown> }>;
   rails: Array<Array<{ label: string; value: string }>>;
   messages: Array<{ name: string; description: string; lineBreaks: number }>;
   events: Array<{ type: string; detail: Record<string, unknown> }>;
@@ -510,12 +539,14 @@ function actualPlaceDetailConsumer(
     "openCategoryByValue",
     "renderPlaces",
     "renderSearchPlaces",
+    "renderFlow",
     "returnFromPlaceDetail",
     "placeCamera",
     "backToMenu",
     "closeActiveExploreStage",
     "onAssistantCloseRequest",
     "openMarkerMembers",
+    "emitStateChange",
   ]);
   const declarations: string[] = [];
   const functions: string[] = [];
@@ -556,45 +587,62 @@ function actualPlaceDetailConsumer(
   // are fixtures; the ID, generation, copy and dispatch decisions are real.
   const javascript = ts.transpileModule(
     `
-      const {createExploreCameraReturn,createPlaceDetailMedia,isExploreLocationVisible,styleReady,publicPlaceCatalogText,locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator}=dependencies;
+      const {createExploreCameraReturn,createPlaceDetailMedia,isExploreLocationVisible,styleReady,publicPlaceCatalogText,locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator,installExploreFlowBottomSheet}=dependencies;
       let styleGeneration=0;
       const placeDetailStyles={cancel(){styleGeneration++;},run(action){const generation=++styleGeneration;if(styleReady)void styleReady.then(()=>{if(generation===styleGeneration)action()}).catch(()=>{});else action();}};
       let activePlace,activePlaceLocation,activePlaceDetail,activeCategory,activeStage="menu",interactionGeneration=0;
       let refreshSavedPlaceActions=()=>{};
       let activePlaceActionValues=[],datasetCriteria=[],mapCalls=0,detailRequests=0;
-      const messages=[],events=[],rails=[];
+      const messages=[],events=[],stateEvents=[],rails=[];
       const listeners=new Map();
       let positionRequests=0,holdPosition=false,resolvePosition;
       const elements=new Map();
       class HTMLElement {
-        constructor(){this.dataset={};this.textContent="";this.children=[];this.classList={remove(){},add(){}};this.isConnected=false;this.parentNode=null;}
-        getAttribute(name){return this[name]??null;}
-        setAttribute(name,value){this[name]=value;if(name.startsWith("data-"))this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;}
-        removeAttribute(name){delete this[name];if(name.startsWith("data-"))delete this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())];}
-        get childNodes(){return this.children;}
-        appendChild(node){if(node.parentNode)node.parentNode.children=node.parentNode.children.filter(child=>child!==node);this.children.push(node);node.parentNode=this;node.isConnected=true;if(node.id)elements.set(node.id,node);}
-        prepend(node){this.children.unshift(node);node.parentNode=this;node.isConnected=this.isConnected;}
-        replaceChildren(...nodes){
-          this.children=nodes;
-          for(const node of nodes){node.parentNode=this;node.isConnected=this.isConnected;}
-          if(this.className==="md-assistant-place-detail-description")this.textContent=nodes.map(node=>node.textContent).join("");
-          if(this.id===ASSISTANT_FLOW_MESSAGE_ID){
-            messages.push({name:nodes[0]?.textContent??"",description:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.textContent??"",lineBreaks:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.children.filter(n=>n.tagName==="br").length??0});
-          }
+        constructor(){
+          this.dataset={};this.textContent="";this.children=[];this.attributes={};
+          this.listeners=new Map();this.className="";this.hidden=false;this.disabled=false;
+          this.isConnected=false;this.parentNode=null;this.scrollTop=0;this.scrollHeight=0;
+          const names=()=>new Set(this.className.split(" ").filter(Boolean));
+          const write=values=>{this.className=[...values].join(" ");};
+          this.classList={
+            add:(...values)=>{const current=names();values.forEach(value=>current.add(value));write(current);},
+            remove:(...values)=>{const current=names();values.forEach(value=>current.delete(value));write(current);},
+            toggle:(value,force)=>{const current=names();const next=force??!current.has(value);if(next)current.add(value);else current.delete(value);write(current);return next;},
+            contains:value=>names().has(value),
+          };
         }
+        get childNodes(){return this.children;}
+        get childElementCount(){return this.children.length;}
+        get firstChild(){return this.children[0]??null;}
+        get parentElement(){return this.parentNode;}
+        getAttribute(name){return this.attributes[name]??null;}
+        setAttribute(name,value){const text=String(value);this.attributes[name]=text;this[name]=text;if(name.startsWith("data-"))this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=text;}
+        removeAttribute(name){delete this.attributes[name];delete this[name];if(name.startsWith("data-"))delete this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())];}
+        appendChild(node){if(node.parentNode)node.parentNode.children=node.parentNode.children.filter(child=>child!==node);this.children.push(node);node.parentNode=this;node.isConnected=this.isConnected||this.tagName==="body";if(node.id)elements.set(node.id,node);return node;}
+        append(...nodes){nodes.forEach(node=>this.appendChild(node));}
+        insertBefore(node,reference){if(node.parentNode)node.parentNode.children=node.parentNode.children.filter(child=>child!==node);const index=reference?this.children.indexOf(reference):-1;if(index<0)this.children.push(node);else this.children.splice(index,0,node);node.parentNode=this;node.isConnected=this.isConnected||this.tagName==="body";if(node.id)elements.set(node.id,node);return node;}
+        prepend(node){this.insertBefore(node,this.firstChild);}
+        replaceChildren(...nodes){for(const previous of this.children)previous.parentNode=null;this.children=[];for(const node of nodes)this.appendChild(node);if(this.className==="md-assistant-place-detail-description")this.textContent=nodes.map(node=>node.textContent).join("");if(this.id===ASSISTANT_FLOW_MESSAGE_ID){messages.push({name:nodes[0]?.textContent??"",description:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.textContent??"",lineBreaks:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.children.filter(n=>n.tagName==="br").length??0});}}
+        descendants(){return this.children.flatMap(child=>[child,...child.descendants()]);}
+        querySelectorAll(selector){const descendants=this.descendants();if(selector.startsWith(".")){const className=selector.slice(1);return descendants.filter(node=>node.classList.contains(className));}if(selector.startsWith("#")){const id=selector.slice(1);return descendants.filter(node=>node.id===id);}return descendants.filter(node=>node.tagName===selector);}
+        querySelector(selector){return this.querySelectorAll(selector)[0]??null;}
         closest(selector){for(let node=this;node;node=node.parentNode){if(selector.split(",").some(part=>part.trim()==="#"+node.id))return node;}return null;}
         matches(selector){return selector===".morro-explore-marker"&&this.className==="morro-explore-marker";}
         focus(){document.activeElement=this;}
-        addEventListener(){}
+        addEventListener(name,listener){this.listeners.set(name,listener);}
+        setPointerCapture(){}
+        releasePointerCapture(){}
         remove(){if(elements.get(this.id)===this)elements.delete(this.id);if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(node=>node!==this);this.parentNode=null;this.isConnected=false;}
         replaceWith(node){const parent=this.parentNode;if(parent){parent.children=parent.children.map(child=>child===this?node:child);node.parentNode=parent;node.isConnected=parent.isConnected;}this.parentNode=null;this.isConnected=false;if(node.id)elements.set(node.id,node);}
       }
       class HTMLButtonElement extends HTMLElement {}
       class CustomEvent { constructor(type,init) { this.type=type;this.detail=init.detail; } }
-      class MutationObserverCtor { constructor(callback) { this.callback=callback; } }
+      class MutationObserverCtor { constructor(callback) { this.callback=callback; } observe(){} disconnect(){} }
+      globalThis.HTMLElement=HTMLElement;
+      globalThis.HTMLButtonElement=HTMLButtonElement;
       const ASSISTANT_FLOW_MESSAGE_ID="assistant-category-results-message";
       const ASSISTANT_FLOW_RESULTS_ID="assistant-category-results";
-      const area=new HTMLElement();
+      const area=new HTMLElement();area.isConnected=true;
       const map=new HTMLElement();map.dataset.exploreState="ready";elements.set("map",map);
       map.getBoundingClientRect=()=>({left:0,top:0,width:390,height:844,right:390,bottom:844});
       let projectedPoint={x:100,y:100};
@@ -602,14 +650,17 @@ function actualPlaceDetailConsumer(
       const nativeMap={project:()=>projectedPoint,getCenter:()=>({lng:camera.center[0],lat:camera.center[1]}),getZoom:()=>camera.zoom,getPitch:()=>camera.pitch,getBearing:()=>camera.bearing,stop(){},jumpTo:value=>{camera={...camera,...value};}},currentMap=()=>nativeMap;
       let storedFavorites=[];
       let mapMarkerElements=[];
-      const document={body:{dataset:{mdMode:"explore"}},documentElement:{lang:locale},activeElement:null,
-        defaultView:{localStorage:{getItem:()=>JSON.stringify({favoritePlaces:storedFavorites})},fetch() { throw Error("Unexpected direct network access"); },navigator:{geolocation:{getCurrentPosition(resolve){positionRequests+=1;if(holdPosition)resolvePosition=resolve;else resolve({coords:{latitude:-13.38,longitude:-38.91}});}}}},
+      const body=new HTMLElement();body.tagName="body";body.isConnected=true;body.dataset.mdMode="explore";
+      const dock=new HTMLElement();dock.tagName="section";dock.id="unified-assistant-dock";dock.getBoundingClientRect=()=>({left:0,top:600,width:390,height:244,right:390,bottom:844});body.appendChild(dock);
+      elements.set("unified-assistant-dock",dock);
+      const document={body,documentElement:{lang:locale},activeElement:null,
+        defaultView:{MutationObserver:MutationObserverCtor,localStorage:{getItem:()=>JSON.stringify({favoritePlaces:storedFavorites})},fetch() { throw Error("Unexpected direct network access"); },navigator:{geolocation:{getCurrentPosition(resolve){positionRequests+=1;if(holdPosition)resolvePosition=resolve;else resolve({coords:{latitude:-13.38,longitude:-38.91}});}}}},
         querySelector:()=>null,querySelectorAll:selector=>selector.includes("morro-explore-marker")?mapMarkerElements:[],
         getElementById:id=>elements.get(id)??null,
-        createElement:(tag)=>Object.assign(new HTMLElement(),{tagName:tag}),
+        createElement:(tag)=>{const node=tag==="button"?new HTMLButtonElement():new HTMLElement();node.tagName=tag;return node;},
         addEventListener:(type,listener)=>{const current=listeners.get(type)??new Set();current.add(listener);listeners.set(type,current);},
         removeEventListener:(type,listener)=>listeners.get(type)?.delete(listener),
-        dispatchEvent:event=>{events.push(event);for(const listener of listeners.get(event.type)??[])listener(event);}};
+        dispatchEvent:event=>{if(event.type==="morro:explore-state-changed")stateEvents.push(event);else events.push(event);for(const listener of listeners.get(event.type)??[])listener(event);}};
       const categoryRail=new HTMLElement();categoryRail.id="assistant-category-rail";categoryRail.isConnected=true;
       const resultsRoot=new HTMLElement();resultsRoot.id="assistant-category-results";resultsRoot.isConnected=true;
       const foreignRoot=new HTMLElement();foreignRoot.id="foreign-assistant-panel";foreignRoot.isConnected=true;
@@ -624,10 +675,23 @@ function actualPlaceDetailConsumer(
       const assistantMessagesArea=()=>area,hideMainMenu=()=>{};
       const currentLocale=()=>normalizeAssistantVoiceLanguage(document.documentElement.lang);
       const currentCategories=()=>getExploreLocationsCategories(currentLocale());
-      const contextualRailScroll={querySelector:selector=>categoryTriggers.get(selector.match(/data-assistant-category="([^"]+)"/)?.[1])??null},exploreFlowBottomSheet={hide(){},setStatus(){},getState(){return null;}};
+      const contextualRailScroll={querySelector:selector=>categoryTriggers.get(selector.match(/data-assistant-category="([^"]+)"/)?.[1])??null};
+      const contextualControls=[],sheetStates=[];
+      const realExploreFlowBottomSheet=installExploreFlowBottomSheet({document,onStateChange:state=>{sheetStates.push(state);emitStateChange();}});
+      realExploreFlowBottomSheet.bindDock(dock);
+      const exploreFlowBottomSheet={
+        bindDock:dock=>realExploreFlowBottomSheet.bindDock(dock),
+        showContextualControls:presentation=>{contextualControls.push(presentation);return realExploreFlowBottomSheet.showContextualControls(presentation);},
+        show:presentation=>realExploreFlowBottomSheet.show(presentation),
+        hide:()=>realExploreFlowBottomSheet.hide(),
+        setState:state=>realExploreFlowBottomSheet.setState(state),
+        getState:()=>realExploreFlowBottomSheet.getState(),
+        setStatus:(status,text,retry)=>realExploreFlowBottomSheet.setStatus(status,text,retry),
+        destroy:()=>realExploreFlowBottomSheet.destroy(),
+      };
       const UNREGISTERED_COMMERCIAL_ACTION_IDS=new Set();
       const removeAssistantFlowResults=()=>{},requestAssistantOpen=()=>{};
-      const renderContextualRail=(_stage,_label,options)=>{rails.push(options);return null;};
+      const renderContextualRail=(_stage,_label,options,onSelect)=>{rails.push(options);const retry=options.find(option=>option.action==="retry");if(retry)retryCallbacks.push(()=>onSelect(retry));return null;};
       const createPublicPlaceMapClient=()=>({getDetail:(id,options)=>{detailRequests+=1;return getDetail(id,options);}});
       let destroyed=false,renderGeneration=0,datasetGeneration=0,datasetGeometryGeneration=0;
       let externalTourOwnsMap=false,retainedMenuContext=false,activeMarkerMembers,datasetCategory,visibleLocations=[];
@@ -642,9 +706,7 @@ function actualPlaceDetailConsumer(
       const groupedMarkers=(locations,registry)=>{registry.clear();return locations.map((location,index)=>{const id=String(index);registry.set(id,[location]);return {...location,id};});};
       const frameLocationsOnMap=(_document,locations)=>{framedLocations=locations;framingCalls.push(locations);if(locations[0])camera={...camera,center:[locations[0].longitude,locations[0].latitude],zoom:16};},clearTourPresentation=()=>{},resetCategoryTriggerState=()=>{},showMainMenu=()=>{},clearExploreRuntimeStatus=()=>{};
       const discoveryClusterLabel=(count)=>String(count)+" places";
-      // Keep other menu boundaries thin; model the group source consumed by the single-message controller.
-      const renderFlow=(text,options=[],onSelect=()=>{})=>{mapFailureRecovery=undefined;restoreCurrentFlow=()=>{renderFlow(text,options,onSelect);};rails.push(options.map(option=>({label:option.label,value:option.value})));const retry=options.find(option=>option.action==="retry");if(retry)retryCallbacks.push(()=>onSelect(retry));let message=elements.get(ASSISTANT_FLOW_MESSAGE_ID);if(!message){message=new HTMLElement();message.id=ASSISTANT_FLOW_MESSAGE_ID;area.appendChild(message);}message.dataset.messageType="category-flow";message.children=[];message.textContent=text;if(activeMarkerMembers){elements.get(ASSISTANT_FLOW_RESULTS_ID)?.remove();const results=new HTMLElement();results.id=ASSISTANT_FLOW_RESULTS_ID;results.setAttribute("aria-label",text);area.appendChild(results);}return null;};
-      const setExploreRuntimeStatus=()=>{},emitStateChange=()=>{};
+      const setExploreRuntimeStatus=()=>{};
       const shareActivePlace=()=>{events.push({type:"share-observed",detail:{}});},tourTicketingUrl=()=>null,startImmersiveTour=()=>{},loadHybridGlobalMarkers=()=>{};
       const refreshCategoryPresentation=()=>{},restoreCategoryRail=()=>{},renderExploreRuntimeStatus=()=>{};
       const exploreRuntimeStatusDescriptor=null,immersiveTourController=null;
@@ -656,6 +718,16 @@ function actualPlaceDetailConsumer(
         search:locations=>{interactionGeneration+=1;renderSearchPlaces(locations,"Resultados","query");},back:returnFromPlaceDetail,
         openMembers:locations=>{openMarkerMembers(locations);const restore=closeMarkerList;return ()=>restore?.();},
         setCamera:(longitude,latitude,zoom)=>{camera={...camera,center:[longitude,latitude],zoom};},camera:()=>({...camera,center:[...camera.center]}),
+        dock:()=>dock,
+        sheetStateButtons:()=>dock.querySelectorAll(".explore-flow-sheet-state-button"),
+        sheetHandle:()=>dock.querySelector(".explore-flow-sheet-drag-handle"),
+        sheetSource:()=>document.getElementById(ASSISTANT_FLOW_RESULTS_ID),
+        clickSheetState:state=>{const button=dock.querySelectorAll(".explore-flow-sheet-state-button").find(button=>button.dataset.sheetStateTarget===state);button?.listeners.get("click")?.({});},
+        sheetPointerDown:(clientY,pointerId)=>{dock.querySelector(".explore-flow-sheet-drag-handle")?.listeners.get("pointerdown")?.({clientY,pointerId});},
+        sheetPointerUp:(clientY,pointerId)=>{dock.querySelector(".explore-flow-sheet-drag-handle")?.listeners.get("pointerup")?.({clientY,pointerId});},
+        contextualControls:()=>contextualControls,
+        sheetStates:()=>[...sheetStates],
+        stateEvents:()=>[...stateEvents],
         setProjectedPoint:(x,y)=>{projectedPoint={x,y};},
         setMapMode:mode=>{document.body.dataset.mdMode=mode;},
         getFramingCalls:()=>framingCalls,
@@ -703,6 +775,7 @@ function actualPlaceDetailConsumer(
     getV1ExploreUiCopy,
     getV1ExplorePlaceActionOptions,
     getAssistantConversationOrchestrator,
+    installExploreFlowBottomSheet,
   };
   const execute = compileFunction(javascript, ["dependencies"]) as (
     context: typeof dependencies,
@@ -747,6 +820,108 @@ function canonicalDetail(placeId: string, description = "Full place details") {
     },
   };
 }
+
+describe("actual Explore bottom sheet producer integration", () => {
+  it("routes filters, places and detail through the real dock controls", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (placeId) =>
+      canonicalDetail(placeId),
+    );
+
+    expect(
+      await consumer.execute({ type: "open_category", category: "beaches" }),
+    ).toBe(true);
+    expect(consumer.contextualControls().at(-1)).toMatchObject({
+      contextKey: "filters:beaches:",
+      initialState: "half",
+    });
+    const filterSource = consumer.sheetSource();
+    expect(filterSource?.getAttribute("aria-hidden")).toBe("true");
+    expect(filterSource?.getAttribute("inert")).toBe("");
+    expect(
+      filterSource?.querySelectorAll(".assistant-flow-option"),
+    ).not.toHaveLength(0);
+    expect(
+      consumer.dock().querySelectorAll(".explore-flow-sheet-toolbar"),
+    ).toHaveLength(1);
+
+    consumer.clickSheetState("full");
+    expect(consumer.dock().dataset.exploreSheetState).toBe("full");
+    consumer.sheetPointerDown(200, 1);
+    consumer.sheetPointerUp(150, 1);
+    expect(consumer.dock().dataset.exploreSheetState).toBe("full");
+    consumer.sheetPointerDown(150, 2);
+    consumer.sheetPointerUp(200, 2);
+    expect(consumer.dock().dataset.exploreSheetState).toBe("half");
+
+    expect(await consumer.execute({ type: "show_all" })).toBe(true);
+    expect(consumer.contextualControls().at(-1)).toMatchObject({
+      contextKey: "places:beaches:",
+      initialState: "half",
+    });
+    const placesSource = consumer.sheetSource();
+    expect(placesSource?.getAttribute("aria-hidden")).toBe("true");
+    expect(placesSource?.getAttribute("inert")).toBe("");
+    expect(
+      placesSource?.querySelectorAll(".assistant-flow-option"),
+    ).not.toHaveLength(0);
+
+    await consumer.select(canonicalLocation("place-a"));
+    expect(consumer.contextualControls().at(-1)).toMatchObject({
+      contextKey: "detail:canonical:place-a",
+      initialState: "half",
+    });
+    expect(consumer.sheetSource()).toBeNull();
+    expect(
+      consumer.dock().querySelectorAll(".explore-flow-sheet-toolbar"),
+    ).toHaveLength(1);
+    consumer.clickSheetState("full");
+    expect(consumer.stateEvents().at(-1)?.detail).toMatchObject({
+      stage: "detail",
+      placeId: "place-a",
+      sheetState: "full",
+    });
+  });
+
+  it("uses canonical identity for continuity, resets distinct IDs, and cancels a stale drag", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", (placeId) =>
+      canonicalDetail(placeId),
+    );
+    const first = canonicalLocation("place-a");
+    const second = {
+      ...first,
+      placeId: "place-b",
+      latitude: -13.39,
+      longitude: -38.9,
+    };
+
+    await consumer.select(first);
+    consumer.clickSheetState("full");
+    consumer.changeLocale("en");
+    await vi.waitFor(() =>
+      expect(consumer.readState().placeId).toBe("place-a"),
+    );
+    expect(consumer.dock().dataset.exploreSheetState).toBe("full");
+    expect(consumer.contextualControls().at(-1)?.contextKey).toBe(
+      "detail:canonical:place-a",
+    );
+
+    consumer.sheetPointerDown(200, 7);
+    await consumer.select(second);
+    consumer.sheetPointerUp(100, 7);
+    expect(consumer.readState().placeId).toBe("place-b");
+    expect(consumer.dock().dataset.exploreSheetState).toBe("half");
+    const detailKeys = consumer
+      .contextualControls()
+      .map(({ contextKey }) => contextKey)
+      .filter(
+        (contextKey): contextKey is string =>
+          contextKey?.startsWith("detail:") ?? false,
+      );
+    expect(detailKeys).toContain("detail:canonical:place-a");
+    expect(detailKeys).toContain("detail:canonical:place-b");
+    expect(new Set(detailKeys).size).toBeGreaterThanOrEqual(2);
+  });
+});
 
 describe("selected canonical place detail action", () => {
   it.each(["canonical", "catalog"] as const)(

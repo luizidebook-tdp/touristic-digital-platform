@@ -1504,7 +1504,9 @@ export function installExploreLocationsControl({
         document.getElementById("map")?.dataset.mapMarkerCount ?? "0",
       ),
       sheetState:
-        activeStage === "filters" || activeStage === "places"
+        activeStage === "filters" ||
+        activeStage === "places" ||
+        activeStage === "detail"
           ? (exploreFlowBottomSheet?.getState() ?? null)
           : null,
       tour,
@@ -2044,13 +2046,18 @@ export function installExploreLocationsControl({
       container.classList.add("md-contextual-rail-source");
       container.setAttribute("aria-hidden", "true");
       container.setAttribute("inert", "");
-      exploreFlowBottomSheet?.hide();
       contextualFirst = renderContextualRail(
         activeStage,
         text,
         options,
         onSelect,
       );
+      exploreFlowBottomSheet?.showContextualControls({
+        accessibleLabel: text,
+        contextKey: `${activeStage}:${activeCategory?.value ?? ""}:${activeSearchQuery}`,
+        initialState: "half",
+        onDismiss: () => backToMenu(),
+      });
     } else if (exploreFlowBottomSheet && activeStage === "tour") {
       exploreFlowBottomSheet.show({
         kind: "tour",
@@ -2104,7 +2111,15 @@ export function installExploreLocationsControl({
     mapFailureRecovery = restore;
     exploreFlowBottomSheet?.setStatus("error", failureText, retry);
   };
-  exploreFlowBottomSheet = installExploreFlowBottomSheet({ document });
+  exploreFlowBottomSheet = installExploreFlowBottomSheet({
+    document,
+    onStateChange: () => emitStateChange(),
+  });
+  const unifiedAssistantDock = document.getElementById(
+    "unified-assistant-dock",
+  );
+  if (unifiedAssistantDock instanceof HTMLElement)
+    exploreFlowBottomSheet.bindDock(unifiedAssistantDock);
 
   const resetCategoryTriggerState = (): void => {
     if (!activeCategoryButton) return;
@@ -2577,6 +2592,23 @@ export function installExploreLocationsControl({
         handlePlaceAction(option.value);
       },
     );
+    const canonicalPlaceId =
+      activePlaceDetail?.placeId ??
+      (activePlaceLocation &&
+      "source" in activePlaceLocation &&
+      activePlaceLocation.source === "canonical" &&
+      "placeId" in activePlaceLocation &&
+      typeof activePlaceLocation.placeId === "string"
+        ? activePlaceLocation.placeId.trim()
+        : "");
+    exploreFlowBottomSheet?.showContextualControls({
+      accessibleLabel: `Ações para ${placeName}`,
+      contextKey: canonicalPlaceId
+        ? `detail:canonical:${canonicalPlaceId}`
+        : `detail:intent:${interactionGeneration}`,
+      initialState: "half",
+      onDismiss: () => backToMenu(),
+    });
     if (previousValue) {
       Array.from(
         contextualRailScroll?.querySelectorAll<HTMLButtonElement>(
