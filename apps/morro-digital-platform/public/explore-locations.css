@@ -721,7 +721,9 @@ body:has(
   #explore-flow-bottom-sheet {
     right: auto;
     left: max(var(--md-space-6), var(--md-safe-left));
-    width: min(34rem, calc(100vw - var(--md-space-12)));
+    /* Manual 16/11: the desktop side panel is a 360-420 px reading column. */
+    width: clamp(22.5rem, 30vw, 26.25rem);
+    max-width: calc(100vw - var(--md-space-12));
   }
 }
 
@@ -1464,4 +1466,30 @@ body:has(#map[data-tour-flow-stage="stop"])
 .md-applied-map-filters button {
   min-height: 3rem;
   min-width: 3rem;
+}
+
+/* Manual 16/11: without published media the block keeps showing the place's
+   own identity, inside the same fixed-height frame. */
+#unified-assistant-dock .md-place-detail-media-caption {
+  grid-area: 1 / 1;
+  align-self: end;
+  padding: 0 var(--md-space-4) var(--md-space-3);
+  color: var(--md-color-text-secondary);
+  font-size: var(--md-font-size-sm);
+  line-height: var(--md-line-height-body);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.explore-flow-sheet-status-message {
+  display: block;
+  min-width: 0;
+}
+.explore-flow-sheet-status-hint {
+  display: block;
+  margin-block-start: var(--md-space-1);
+  color: var(--md-color-text-secondary);
+}
+.explore-flow-sheet-retry {
+  margin-block-start: var(--md-space-3);
+  min-height: var(--md-touch-target-min);
 }
