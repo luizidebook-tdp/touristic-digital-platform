@@ -2962,6 +2962,43 @@ describe("canonical detail media presentation", () => {
         expect(figure.children[0]!.hidden).toBe(false);
       },
     );
+    it("names the place and its category when no published photo exists", () => {
+      const fixture = dom();
+      fixture.parent.appendChild(
+        createPlaceDetailMedia(
+          fixture.document,
+          null,
+          "place-toca",
+          "Toca do Morcego",
+          "pt",
+          "Vida noturna",
+        ) as unknown as ElementFixture,
+      );
+      const figure = fixture.parent.children[0]!;
+      expect(figure.dataset.mediaState).toBe("missing");
+      const [fallback, caption] = figure.children;
+      expect(fallback!.textContent).toBe("Foto não disponível");
+      expect(caption!.className).toBe("md-place-detail-media-caption");
+      expect(caption!.textContent).toBe("Toca do Morcego · Vida noturna");
+      expect(caption!.hidden).toBe(false);
+    });
+    it("keeps the identity caption hidden while a published photo is shown", () => {
+      const fixture = dom();
+      fixture.parent.appendChild(
+        createPlaceDetailMedia(
+          fixture.document,
+          media(),
+          "place-toca",
+          "Toca do Morcego",
+          "pt",
+          "Vida noturna",
+        ) as unknown as ElementFixture,
+      );
+      const figure = fixture.parent.children[0]!;
+      const caption = figure.children[figure.children.length - 1]!;
+      expect(caption.className).toBe("md-place-detail-media-caption");
+      expect(caption.hidden).toBe(true);
+    });
 
     it("shows the canonical image and recovers from an image load failure", () => {
       const fixture = dom();
@@ -3244,5 +3281,41 @@ describe("canonical detail layout integration", () => {
       expect(f.scroller.scrollTop).toBe(0);
       expect(f.region.classes.has("has-overflow")).toBe(false);
     });
+  });
+});
+
+describe("published catalog empty states", () => {
+  const empty = Object.freeze({ offers: [], menu: null });
+  it.each([
+    ["pt", "Não há ofertas publicadas."],
+    ["en", "There are no published offers."],
+    ["es", "No hay ofertas publicadas."],
+    ["he", "אין הצעות שפורסמו."],
+  ] as const)("states the absence of offers in %s", (locale, expected) => {
+    expect(publicPlaceCatalogText("offers", empty, locale)).toBe(expected);
+  });
+  it("keeps the generic section copy for products and still lists published offers", () => {
+    expect(
+      publicPlaceCatalogText("products", { ...empty, products: [] }, "pt"),
+    ).toBe("Não há itens publicados disponíveis nesta seção.");
+    expect(
+      publicPlaceCatalogText(
+        "offers",
+        {
+          menu: null,
+          offers: [
+            {
+              id: "offer-a",
+              productId: "product-a",
+              name: "Passeio de barco",
+              description: "Saída às 9h",
+              price: { currency: "BRL", minorUnits: 12000 },
+              salesEndsAt: null,
+            },
+          ],
+        },
+        "pt",
+      ),
+    ).toContain("Passeio de barco");
   });
 });
