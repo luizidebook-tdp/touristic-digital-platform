@@ -87,7 +87,9 @@ export type V1ExploreLabelKey =
   | "viewStop"
   | "viewProducts"
   | "save"
-  | "share";
+  | "share"
+  | "loadFailed"
+  | "retry";
 
 type Copy = Readonly<Record<AssistantLocale, string>>;
 
@@ -549,6 +551,18 @@ const LABELS: Readonly<Record<V1ExploreLabelKey, Copy>> = Object.freeze({
   },
   save: { pt: "Salvar", en: "Save", es: "Guardar", he: "שמירה" },
   share: { pt: "Compartilhar", en: "Share", es: "Compartir", he: "שיתוף" },
+  loadFailed: {
+    pt: "Não foi possível carregar.",
+    en: "Could not load.",
+    es: "No se pudo cargar.",
+    he: "לא ניתן לטעון.",
+  },
+  retry: {
+    pt: "Tentar novamente",
+    en: "Try again",
+    es: "Reintentar",
+    he: "נסו שוב",
+  },
 });
 
 export function getV1ExploreLabel(

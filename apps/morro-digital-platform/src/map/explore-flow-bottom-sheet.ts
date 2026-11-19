@@ -12,6 +12,7 @@ export interface ExploreFlowBottomSheetPresentation {
   readonly content?: HTMLElement;
   readonly status?: ExploreFlowBottomSheetStatus;
   readonly statusText?: string;
+  readonly onRetry?: () => void;
   readonly onDismiss: () => void;
 }
 
@@ -20,7 +21,11 @@ export interface ExploreFlowBottomSheetController {
   hide(): void;
   setState(state: ExploreFlowBottomSheetState): void;
   getState(): ExploreFlowBottomSheetState;
-  setStatus(status: ExploreFlowBottomSheetStatus, text?: string): void;
+  setStatus(
+    status: ExploreFlowBottomSheetStatus,
+    text?: string,
+    retry?: () => void,
+  ): void;
   destroy(): void;
 }
 
@@ -33,6 +38,8 @@ type SheetCopy = Readonly<{
   loading: string;
   empty: string;
   unavailable: string;
+  loadFailed: string;
+  retry: string;
   states: Readonly<Record<ExploreFlowBottomSheetState, string>>;
 }>;
 const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
@@ -42,6 +49,8 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
     empty: "Nenhum resultado encontrado para este filtro.",
     unavailable:
       "Não foi possível atualizar o mapa agora. Seus filtros foram preservados.",
+    loadFailed: "Não foi possível carregar.",
+    retry: "Tentar novamente",
     states: {
       peek: "Mostrar resumo",
       half: "Mostrar conteúdo principal",
@@ -54,6 +63,8 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
     empty: "No results were found for this filter.",
     unavailable:
       "The map could not be updated right now. Your filters were preserved.",
+    loadFailed: "Could not load.",
+    retry: "Try again",
     states: {
       peek: "Show summary",
       half: "Show main content",
@@ -66,6 +77,8 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
     empty: "No se encontraron resultados para este filtro.",
     unavailable:
       "No fue posible actualizar el mapa ahora. Tus filtros se conservaron.",
+    loadFailed: "No se pudo cargar.",
+    retry: "Reintentar",
     states: {
       peek: "Mostrar resumen",
       half: "Mostrar contenido principal",
@@ -77,6 +90,8 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
     loading: "מעדכן את המפה והתוצאות…",
     empty: "לא נמצאו תוצאות למסנן הזה.",
     unavailable: "לא ניתן לעדכן את המפה כרגע. המסננים שלך נשמרו.",
+    loadFailed: "לא ניתן לטעון.",
+    retry: "נסו שוב",
     states: {
       peek: "הצגת תקציר",
       half: "הצגת התוכן הראשי",
@@ -213,6 +228,7 @@ export function installExploreFlowBottomSheet({
   const setStatus = (
     nextStatus: ExploreFlowBottomSheetStatus,
     text?: string,
+    retry?: () => void,
   ): void => {
     const copy = currentCopy(document);
     sheet.dataset.flowState = nextStatus;
@@ -234,8 +250,27 @@ export function installExploreFlowBottomSheet({
       status.appendChild(sr);
       return;
     }
-    status.textContent =
-      text || (nextStatus === "empty" ? copy.empty : copy.unavailable);
+    const message = document.createElement("span");
+    message.className = "explore-flow-sheet-status-message";
+    message.textContent =
+      text || (nextStatus === "empty" ? copy.empty : copy.loadFailed);
+    status.appendChild(message);
+    if (nextStatus === "error") {
+      // The manual requires an explicit recovery affordance that keeps the
+      // visitor's filters and camera instead of restarting the journey.
+      const hint = document.createElement("span");
+      hint.className = "explore-flow-sheet-status-hint";
+      hint.textContent = copy.unavailable;
+      status.appendChild(hint);
+      if (retry) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "md-button explore-flow-sheet-retry";
+        button.textContent = copy.retry;
+        button.addEventListener("click", () => retry());
+        status.appendChild(button);
+      }
+    }
   };
 
   const setState = (nextState: ExploreFlowBottomSheetState): void => {
@@ -330,7 +365,11 @@ export function installExploreFlowBottomSheet({
     rebuildStateControls(presentation.kind);
     sheet.dataset.flowKind = presentation.kind;
     heading.textContent = presentation.accessibleLabel;
-    setStatus(presentation.status ?? "ready", presentation.statusText);
+    setStatus(
+      presentation.status ?? "ready",
+      presentation.statusText,
+      presentation.onRetry,
+    );
 
     richContent.replaceChildren();
     if (presentation.content) {

@@ -222,6 +222,7 @@ export function createPlaceDetailMedia(
   placeId: string,
   name: string,
   locale: AssistantLocale,
+  categoryLabel?: string,
 ): HTMLElement {
   const gallery = resolvePlaceDetailGallery(media, placeId, name);
   const figure = document.createElement("figure");
@@ -232,6 +233,16 @@ export function createPlaceDetailMedia(
   fallback.setAttribute("role", "status");
   fallback.textContent = missingPhotoCopy[locale];
   fallback.hidden = gallery.length > 0;
+  // Without published media the block stays a discrete graphic placeholder
+  // carrying the place's own identity: name plus category, never another
+  // establishment's photo.
+  const captionLabel = categoryLabel?.trim();
+  const caption = captionLabel ? document.createElement("span") : undefined;
+  if (caption && captionLabel) {
+    caption.className = "md-place-detail-media-caption";
+    caption.textContent = [name, captionLabel].filter(Boolean).join(" · ");
+    caption.hidden = gallery.length > 0;
+  }
   if (gallery.length) {
     let image: HTMLImageElement | undefined;
     let index = 0;
@@ -263,6 +274,7 @@ export function createPlaceDetailMedia(
           if (next) next.hidden = true;
           if (counter) counter.hidden = true;
           fallback.hidden = false;
+          if (caption) caption.hidden = false;
           figure.dataset.mediaState = "missing";
         } else move(1);
         if (restoreFocus && gallery.length - failed.size < 2)
@@ -324,6 +336,7 @@ export function createPlaceDetailMedia(
     display();
   }
   figure.appendChild(fallback);
+  if (caption) figure.appendChild(caption);
   return figure;
 }
 
@@ -1565,10 +1578,21 @@ export function installExploreLocationsControl({
     const setSheetStatus = (
       status: "loading" | "ready" | "empty" | "error",
       text?: string,
+      retry?: () => void,
     ): void => {
       if (activeStage === "filters" || activeStage === "places") {
-        exploreFlowBottomSheet?.setStatus(status, text);
+        exploreFlowBottomSheet?.setStatus(status, text, retry);
       }
+    };
+
+    const retryDatasetRender = (): void => {
+      void renderLocationsOnMap(
+        locations,
+        category,
+        openSelectedPopup,
+        cameraOnly,
+        criteria,
+      );
     };
 
     // A direct place selection can come from outside the active filter. Keep
@@ -1604,12 +1628,7 @@ export function installExploreLocationsControl({
     setSheetStatus("loading");
     if (!geospatialEngine?.initialized) {
       updateMapState(renderedMarkers.length, category, "error");
-      setSheetStatus(
-        "error",
-        getV1ExploreUiCopy(currentLocale()).mapCategoryError(
-          getV1ExploreUiCopy(currentLocale()).mapUnknown,
-        ),
-      );
+      showMapFailure(retryDatasetRender);
       emitStateChange();
       return;
     }
@@ -1704,10 +1723,7 @@ export function installExploreLocationsControl({
       } catch {
         // Preserve the first provider failure for diagnostics.
       }
-      const message = getV1ExploreUiCopy(currentLocale()).mapCategoryError(
-        describeExploreError(error, currentLocale()),
-      );
-      setSheetStatus("error", message);
+      showMapFailure(retryDatasetRender);
       emitStateChange();
       setExploreRuntimeStatus({ kind: "map-error", error });
     }
@@ -1896,6 +1912,7 @@ export function installExploreLocationsControl({
           visual.placeId,
           location.name,
           currentLocale(),
+          categoryLabel,
         ),
       );
     } else {
@@ -2038,6 +2055,28 @@ export function installExploreLocationsControl({
     );
   };
 
+  // A failed query stays recoverable in the surface that owns the journey: the
+  // rail shows the plain "could not load" sentence plus a retry that repeats the
+  // very same request, so filters, dataset and camera are never restarted.
+  const showMapFailure = (retry: () => void): void => {
+    if (activeStage !== "filters" && activeStage !== "places") return;
+    const locale = currentLocale();
+    const failureText = getV1ExploreLabel("loadFailed", locale);
+    renderFlow(
+      failureText,
+      [
+        {
+          label: `↻ ${getV1ExploreLabel("retry", locale)}`,
+          value: "__explore_retry__",
+          action: "retry" as const,
+        },
+      ],
+      (option) => {
+        if (option.action === "retry") retry();
+      },
+    );
+    exploreFlowBottomSheet?.setStatus("error", failureText, retry);
+  };
   exploreFlowBottomSheet = installExploreFlowBottomSheet({ document });
 
   const resetCategoryTriggerState = (): void => {

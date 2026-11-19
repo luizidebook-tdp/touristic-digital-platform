@@ -7,24 +7,28 @@ const copy = {
     offers: "Ofertas · preços de catálogo",
     menu: "Cardápio",
     unavailable: "Não há itens publicados disponíveis nesta seção.",
+    offersUnavailable: "Não há ofertas publicadas.",
   },
   en: {
     products: "Products",
     offers: "Offers · catalog prices",
     menu: "Menu",
     unavailable: "No published items are available in this section.",
+    offersUnavailable: "There are no published offers.",
   },
   es: {
     products: "Productos",
     offers: "Ofertas · precios de catálogo",
     menu: "Menú",
     unavailable: "No hay artículos publicados disponibles en esta sección.",
+    offersUnavailable: "No hay ofertas publicadas.",
   },
   he: {
     products: "מוצרים",
     offers: "הצעות · מחירי קטלוג",
     menu: "תפריט",
     unavailable: "אין פריטים שפורסמו הזמינים בחלק זה.",
+    offersUnavailable: "אין הצעות שפורסמו.",
   },
 } as const;
 
@@ -65,7 +69,7 @@ export function publicPlaceCatalogText(
               .join(" — ");
           }),
         ].join("\n")
-      : labels.unavailable;
+      : labels.offersUnavailable;
   }
   const menu = commerce?.menu;
   if (!menu) return labels.unavailable;
