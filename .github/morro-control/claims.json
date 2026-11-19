@@ -214,7 +214,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "feat/control-center-owner-panels-20261118",
-      "baseSha": "d27fcfaac97cddd615ca01de9dd238bcc96c1aa1",
+      "baseSha": "6546dbee0adab53c853fbd8b16fe51d974040d8f",
       "paths": [
         ".morro/changesets/MD-OWNER-BUSINESS-AFFILIATE-20261118.json",
         ".morro/ownership.json",
