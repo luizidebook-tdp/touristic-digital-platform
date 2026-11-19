@@ -166,7 +166,7 @@ const CATEGORY_PLACE_ACTIONS = Object.freeze({
     {
       actionId: "place.info",
       icon: "ℹ️",
-      key: "learnMore",
+      key: "learnPlace",
       value: "saiba mais",
     },
     {
@@ -210,7 +210,7 @@ const CATEGORY_PLACE_ACTIONS = Object.freeze({
     {
       actionId: "place.info",
       icon: "ℹ️",
-      key: "learnMore",
+      key: "learnPlace",
       value: "saiba mais",
     },
     {
@@ -236,7 +236,7 @@ const CATEGORY_PLACE_ACTIONS = Object.freeze({
     {
       actionId: "place.info",
       icon: "ℹ️",
-      key: "learnMore",
+      key: "learnPlace",
       value: "saiba mais",
     },
     {
@@ -262,7 +262,7 @@ const CATEGORY_PLACE_ACTIONS = Object.freeze({
     {
       actionId: "place.info",
       icon: "ℹ️",
-      key: "learnMore",
+      key: "learnPlace",
       value: "saiba mais",
     },
     {
@@ -300,7 +300,7 @@ const CATEGORY_PLACE_ACTIONS = Object.freeze({
     {
       actionId: "place.info",
       icon: "ℹ️",
-      key: "learnMore",
+      key: "learnPlace",
       value: "saiba mais",
     },
     {
@@ -338,7 +338,7 @@ const CATEGORY_PLACE_ACTIONS = Object.freeze({
     {
       actionId: "place.info",
       icon: "ℹ️",
-      key: "learnMore",
+      key: "learnPlace",
       value: "saiba mais",
     },
     {
@@ -372,7 +372,7 @@ const GENERIC_PLACE_ACTIONS: readonly ActionSpec[] = Object.freeze([
   {
     actionId: "place.info",
     icon: "ℹ️",
-    key: "learnMore",
+    key: "learnPlace",
     value: "saiba mais",
   },
   {

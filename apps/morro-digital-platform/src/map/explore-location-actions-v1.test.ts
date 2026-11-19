@@ -117,7 +117,7 @@ describe("category-aware place actions", () => {
       pt.map(({ actionId }) => actionId),
     );
     expect(en.map(({ label }) => label)).toEqual([
-      "ℹ️ Learn more",
+      "ℹ️ Learn about this place",
       "🚕 Request transport",
       "🎫 Buy ticket",
       "📍 View stop",

@@ -1021,10 +1021,15 @@ export function installExploreLocationsControl({
   const detailMinimizeButton = document.querySelector(
     "#assistant-messages .minimize-button",
   );
-  detailMinimizeButton?.addEventListener("click", placeDetailStyles.cancel);
+  let closeActiveExploreStage: () => void = () => {};
+  const onAssistantCloseRequest = (): void => {
+    placeDetailStyles.cancel();
+    closeActiveExploreStage();
+  };
+  detailMinimizeButton?.addEventListener("click", onAssistantCloseRequest);
   document.addEventListener(
     ASSISTANT_CLOSE_REQUEST_EVENT,
-    placeDetailStyles.cancel,
+    onAssistantCloseRequest,
   );
 
   let geospatialEngine: GeospatialEngine | undefined;
@@ -1115,6 +1120,8 @@ export function installExploreLocationsControl({
   let initialLocations: readonly ExploreMapLocation[] = [];
   let initialGeneration = 0;
   let restoreCurrentFlow: (() => void) | undefined;
+  let mapFailureRecovery: (() => void) | undefined;
+  let placeOriginFocus: HTMLElement | undefined;
   let closeMarkerList: (() => void) | undefined;
   let refreshMarkerList: (() => void) | undefined;
   let returnToMarkerList: (() => void) | undefined;
@@ -1574,6 +1581,7 @@ export function installExploreLocationsControl({
     const requestedDataset = datasetGeneration;
     const cameraGeneration = placeCamera.generation();
     const cameraMap = nativeMap ?? currentMap();
+    const flowToRestore = mapFailureRecovery ?? restoreCurrentFlow;
 
     const setSheetStatus = (
       status: "loading" | "ready" | "empty" | "error",
@@ -1586,6 +1594,15 @@ export function installExploreLocationsControl({
     };
 
     const retryDatasetRender = (): void => {
+      if (
+        destroyed ||
+        (activeStage !== "filters" && activeStage !== "places") ||
+        generation !== interactionGeneration ||
+        requestedDataset !== datasetGeneration ||
+        (categoryAtStart !== undefined &&
+          activeCategory?.value !== categoryAtStart)
+      )
+        return;
       void renderLocationsOnMap(
         locations,
         category,
@@ -1628,7 +1645,7 @@ export function installExploreLocationsControl({
     setSheetStatus("loading");
     if (!geospatialEngine?.initialized) {
       updateMapState(renderedMarkers.length, category, "error");
-      showMapFailure(retryDatasetRender);
+      showMapFailure(retryDatasetRender, flowToRestore);
       emitStateChange();
       return;
     }
@@ -1703,6 +1720,11 @@ export function installExploreLocationsControl({
         !isExploreLocationVisible(document, selected, nativeMap ?? currentMap())
       )
         frameLocationsOnMap(document, [selected], geospatialEngine);
+      if (!cameraOnly) {
+        const recovery = mapFailureRecovery;
+        mapFailureRecovery = undefined;
+        recovery?.();
+      }
       setSheetStatus(locations.length === 0 ? "empty" : "ready");
       if (!cameraOnly) emitStateChange();
     } catch (error) {
@@ -1723,7 +1745,7 @@ export function installExploreLocationsControl({
       } catch {
         // Preserve the first provider failure for diagnostics.
       }
-      showMapFailure(retryDatasetRender);
+      showMapFailure(retryDatasetRender, flowToRestore);
       emitStateChange();
       setExploreRuntimeStatus({ kind: "map-error", error });
     }
@@ -1875,6 +1897,9 @@ export function installExploreLocationsControl({
 
     const title = document.createElement("strong");
     title.className = "md-assistant-place-detail-title";
+    title.tabIndex = -1;
+    title.setAttribute("role", "heading");
+    title.setAttribute("aria-level", "2");
     title.textContent = location.name;
 
     const meta = document.createElement("span");
@@ -1942,6 +1967,7 @@ export function installExploreLocationsControl({
     statusOverride?: "loading" | "ready" | "empty" | "error",
     statusTextOverride?: string,
   ): HTMLButtonElement | null => {
+    mapFailureRecovery = undefined;
     restoreCurrentFlow = () => {
       renderFlow(
         text,
@@ -2058,7 +2084,7 @@ export function installExploreLocationsControl({
   // A failed query stays recoverable in the surface that owns the journey: the
   // rail shows the plain "could not load" sentence plus a retry that repeats the
   // very same request, so filters, dataset and camera are never restarted.
-  const showMapFailure = (retry: () => void): void => {
+  const showMapFailure = (retry: () => void, restore?: () => void): void => {
     if (activeStage !== "filters" && activeStage !== "places") return;
     const locale = currentLocale();
     const failureText = getV1ExploreLabel("loadFailed", locale);
@@ -2075,6 +2101,7 @@ export function installExploreLocationsControl({
         if (option.action === "retry") retry();
       },
     );
+    mapFailureRecovery = restore;
     exploreFlowBottomSheet?.setStatus("error", failureText, retry);
   };
   exploreFlowBottomSheet = installExploreFlowBottomSheet({ document });
@@ -2087,6 +2114,9 @@ export function installExploreLocationsControl({
 
   const backToMenu = (restoreFocus = true): void => {
     const returningFromDetail = activeStage === "detail";
+    const detailOriginFocus = returningFromDetail
+      ? placeOriginFocus
+      : undefined;
     interactionGeneration += 1;
     datasetGeneration += 1;
     markerRegistry.clear();
@@ -2094,6 +2124,8 @@ export function installExploreLocationsControl({
     refreshMarkerList = undefined;
     returnToMarkerList = undefined;
     restoreCurrentFlow = undefined;
+    mapFailureRecovery = undefined;
+    placeOriginFocus = undefined;
     const previousCategoryValue = activeCategory?.value;
     const previousExternalOwnership = externalTourOwnsMap;
     externalTourOwnsMap = false;
@@ -2154,13 +2186,18 @@ export function installExploreLocationsControl({
     restoreCategoryRail();
     emitStateChange();
     void loadHybridGlobalMarkers();
-    if (restoreFocus && previousCategoryValue) {
+    if (restoreFocus && detailOriginFocus?.isConnected) {
+      detailOriginFocus.focus({ preventScroll: true });
+    } else if (restoreFocus && previousCategoryValue) {
       contextualRailScroll
         ?.querySelector<HTMLButtonElement>(
           `[data-assistant-category="${previousCategoryValue}"]`,
         )
         ?.focus();
     }
+  };
+  closeActiveExploreStage = () => {
+    if (activeStage !== "menu") backToMenu();
   };
 
   const shareActivePlace = (): void => {
@@ -2421,7 +2458,7 @@ export function installExploreLocationsControl({
     };
     if (primaryAction?.actionId === "info") {
       primaryAction = readActivePlaceDetail(primaryAction.value)
-        ? { ...primaryAction, label: getV1ExploreLabel("viewDetails", locale) }
+        ? { ...primaryAction, label: getV1ExploreLabel("learnPlace", locale) }
         : null;
     }
     const options: Array<{
@@ -2447,7 +2484,7 @@ export function installExploreLocationsControl({
       options.push({
         label:
           action.actionId === "info"
-            ? getV1ExploreLabel("viewDetails", locale)
+            ? getV1ExploreLabel("learnPlace", locale)
             : action.label,
         value: action.value,
         action: action.action,
@@ -2558,6 +2595,10 @@ export function installExploreLocationsControl({
       reason === "restore" &&
       activeStage === "detail" &&
       activePlaceLocation === location;
+    if (!refreshingLocale && !restoringDetail && activeStage !== "detail") {
+      const focused = document.activeElement;
+      placeOriginFocus = focused instanceof HTMLElement ? focused : undefined;
+    }
     if (!refreshingLocale && !restoringDetail) {
       if (visibleLocations.length === 0)
         installDataset([location], location.category, datasetCriteria);
@@ -2599,12 +2640,11 @@ export function installExploreLocationsControl({
       exploreFlowBottomSheet?.hide();
     }
 
-    const safeFallbackActions = getV1ExplorePlaceActionOptions(
-      category,
-      locale,
-    ).filter(
-      ({ actionId }) => !UNREGISTERED_COMMERCIAL_ACTION_IDS.has(actionId),
-    );
+    const safeFallbackActions = canonicalPlaceId
+      ? Object.freeze([])
+      : getV1ExplorePlaceActionOptions(category, locale).filter(
+          ({ actionId }) => !UNREGISTERED_COMMERCIAL_ACTION_IDS.has(actionId),
+        );
     const description =
       "description" in presentationLocation &&
       typeof presentationLocation.description === "string"
@@ -2630,7 +2670,14 @@ export function installExploreLocationsControl({
       presentationLocation.name,
       locale,
     );
-    if (!refreshingLocale) firstPlaceAction?.focus();
+    if (!refreshingLocale) {
+      if (canonicalPlaceId) {
+        const title = selectionMessage?.querySelector?.<HTMLElement>(
+          ".md-assistant-place-detail-title",
+        );
+        title?.focus?.({ preventScroll: true });
+      } else firstPlaceAction?.focus();
+    }
 
     const browserFetch = document.defaultView?.fetch?.bind(
       document.defaultView,
@@ -3994,11 +4041,11 @@ export function installExploreLocationsControl({
       placeDetailStyles.cancel();
       detailMinimizeButton?.removeEventListener(
         "click",
-        placeDetailStyles.cancel,
+        onAssistantCloseRequest,
       );
       document.removeEventListener(
         ASSISTANT_CLOSE_REQUEST_EVENT,
-        placeDetailStyles.cancel,
+        onAssistantCloseRequest,
       );
       if (externalTourOwnsMap) clearTourPresentation(document);
       destroyed = true;

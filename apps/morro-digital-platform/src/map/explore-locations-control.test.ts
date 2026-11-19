@@ -444,6 +444,11 @@ interface PlaceDetailConsumer {
   getSelectedMarkerIds(): string[];
   setProjectedPoint(x: number, y: number): void;
   setMapMode(mode: string): void;
+  failNextMarkers(): void;
+  providerCalls(): number;
+  mapState(): string | undefined;
+  retry(index?: number): void;
+  retryCount(): number;
   search(locations: ExploreSearchResult[]): void;
   back(): void;
   openMembers(locations: ExploreMapLocation[]): () => void;
@@ -491,6 +496,7 @@ function actualPlaceDetailConsumer(
     "installDataset",
     "updateMapState",
     "renderLocationsOnMap",
+    "showMapFailure",
     "renderMapOnlyLocations",
     "execute",
     "applyFlowOption",
@@ -589,18 +595,19 @@ function actualPlaceDetailConsumer(
       const createPublicPlaceMapClient=()=>({getDetail:(id,options)=>{detailRequests+=1;return getDetail(id,options);}});
       let destroyed=false,renderGeneration=0,datasetGeneration=0,datasetGeometryGeneration=0;
       let externalTourOwnsMap=false,retainedMenuContext=false,activeMarkerMembers,datasetCategory,visibleLocations=[];
-      let activeCategoryButton,activeSearchQuery="",restoreCurrentFlow,closeMarkerList,refreshMarkerList,returnToMarkerList;
+      let activeCategoryButton,activeSearchQuery="",restoreCurrentFlow,mapFailureRecovery,closeMarkerList,refreshMarkerList,returnToMarkerList;
       let placeReturnLocations=[],placeReturnCriteria=[],placeReturnMessage="",placeReturnIsSearch=false;
-      let markerQueue=Promise.resolve(),markerProviderReady=Promise.resolve();
+      let markerQueue=Promise.resolve(),markerProviderReady=Promise.resolve(),markerProviderOutcome="resolve",markerProviderCalls=0;
+      const retryCallbacks=[];
       let renderedLocations=[],framedLocations=[],framingCalls=[];
-      const geospatialEngine={initialized:true,replaceMarkers:(markers)=>{renderedLocations=markers;mapMarkerElements=markers.map(marker=>{const el=new HTMLElement();el.dataset.markerId=marker.id;return el;});mapCalls+=1;return markerProviderReady;}};
+      const geospatialEngine={initialized:true,replaceMarkers:(markers)=>{renderedLocations=markers;mapMarkerElements=markers.map(marker=>{const el=new HTMLElement();el.dataset.markerId=marker.id;return el;});mapCalls+=1;markerProviderCalls+=1;const outcome=markerProviderOutcome;markerProviderOutcome="resolve";return outcome==="reject"?Promise.reject(Error("provider unavailable")):markerProviderReady;}};
       const markerRegistry=new Map();
       const clearDatasetGeometry=()=>{},publishDatasetGeometry=()=>{},syncLocationCounts=()=>{};
       const groupedMarkers=(locations,registry)=>{registry.clear();return locations.map((location,index)=>{const id=String(index);registry.set(id,[location]);return {...location,id};});};
       const frameLocationsOnMap=(_document,locations)=>{framedLocations=locations;framingCalls.push(locations);if(locations[0])camera={...camera,center:[locations[0].longitude,locations[0].latitude],zoom:16};},clearTourPresentation=()=>{},resetCategoryTriggerState=()=>{},showMainMenu=()=>{},clearExploreRuntimeStatus=()=>{};
       const discoveryClusterLabel=(count)=>String(count)+" places";
       // Keep other menu boundaries thin; model the group source consumed by the single-message controller.
-      const renderFlow=(text)=>{let message=elements.get(ASSISTANT_FLOW_MESSAGE_ID);if(!message){message=new HTMLElement();message.id=ASSISTANT_FLOW_MESSAGE_ID;area.appendChild(message);}message.dataset.messageType="category-flow";message.children=[];message.textContent=text;if(activeMarkerMembers){elements.get(ASSISTANT_FLOW_RESULTS_ID)?.remove();const results=new HTMLElement();results.id=ASSISTANT_FLOW_RESULTS_ID;results.setAttribute("aria-label",text);area.appendChild(results);}return null;};
+      const renderFlow=(text,options=[],onSelect=()=>{})=>{mapFailureRecovery=undefined;restoreCurrentFlow=()=>{renderFlow(text,options,onSelect);};rails.push(options.map(option=>({label:option.label,value:option.value})));const retry=options.find(option=>option.action==="retry");if(retry)retryCallbacks.push(()=>onSelect(retry));let message=elements.get(ASSISTANT_FLOW_MESSAGE_ID);if(!message){message=new HTMLElement();message.id=ASSISTANT_FLOW_MESSAGE_ID;area.appendChild(message);}message.dataset.messageType="category-flow";message.children=[];message.textContent=text;if(activeMarkerMembers){elements.get(ASSISTANT_FLOW_RESULTS_ID)?.remove();const results=new HTMLElement();results.id=ASSISTANT_FLOW_RESULTS_ID;results.setAttribute("aria-label",text);area.appendChild(results);}return null;};
       const setExploreRuntimeStatus=()=>{},emitStateChange=()=>{};
       const shareActivePlace=()=>{events.push({type:"share-observed",detail:{}});},tourTicketingUrl=()=>null,startImmersiveTour=()=>{},loadHybridGlobalMarkers=()=>{};
       const refreshCategoryPresentation=()=>{},restoreCategoryRail=()=>{},renderExploreRuntimeStatus=()=>{};
@@ -608,13 +615,14 @@ function actualPlaceDetailConsumer(
       ${functions.join("\n")}
       ${declarations.join("\n")}
       return {document,execute,select:selectLocation,click:handlePlaceAction,readState:stateSnapshot,setFavorites:(value)=>{storedFavorites=value;},refreshSaved:()=>refreshSavedPlaceActions(),rails,messages,events,
-        search:locations=>renderSearchPlaces(locations,"Resultados","query"),back:returnFromPlaceDetail,
+        search:locations=>{interactionGeneration+=1;renderSearchPlaces(locations,"Resultados","query");},back:returnFromPlaceDetail,
         openMembers:locations=>{openMarkerMembers(locations);const restore=closeMarkerList;return ()=>restore?.();},
         setCamera:(longitude,latitude,zoom)=>{camera={...camera,center:[longitude,latitude],zoom};},camera:()=>({...camera,center:[...camera.center]}),
         setProjectedPoint:(x,y)=>{projectedPoint={x,y};},
         setMapMode:mode=>{document.body.dataset.mdMode=mode;},
         getFramingCalls:()=>framingCalls,
         setLocations:locations=>{visibleLocations=locations;datasetCategory="search";},getLocations:()=>visibleLocations,getRenderedLocations:()=>renderedLocations,getFramedLocations:()=>framedLocations,getSelectedMarkerIds:()=>mapMarkerElements.filter(el=>el.dataset.selected==="true").map(el=>el.dataset.markerId),
+        failNextMarkers:()=>{markerProviderOutcome="reject";},providerCalls:()=>markerProviderCalls,mapState:()=>elements.get("map")?.dataset.exploreState,retry:index=>{const callback=index===undefined?retryCallbacks.at(-1):retryCallbacks[index];callback?.();},retryCount:()=>retryCallbacks.length,
         listenerCount:type=>listeners.get(type)?.size??0,
         holdMarkers:()=>{let release;markerProviderReady=new Promise(resolve=>{release=resolve;});return ()=>{markerProviderReady=Promise.resolve();release();};},
         holdPosition:()=>{holdPosition=true;return ()=>{holdPosition=false;resolvePosition?.({coords:{latitude:-13.38,longitude:-38.91}});};},
@@ -795,6 +803,32 @@ describe("selected canonical place detail action", () => {
     expect(consumer.messages.at(-1)?.description).toBe("Resolved detail");
   });
 
+  it("keeps only the back action while the canonical detail is pending", async () => {
+    const pending = deferredDetail();
+    const consumer = actualPlaceDetailConsumer("pt", () => pending.promise);
+    const selection = consumer.select(canonicalLocation("place-a"));
+
+    await vi.waitFor(() => expect(consumer.snapshot().detailRequests).toBe(1));
+    const loadingRail = consumer.rails.at(-1) ?? [];
+    expect(loadingRail).toHaveLength(1);
+    expect(loadingRail[0]).toEqual(
+      expect.objectContaining({ value: "__back_to_places__" }),
+    );
+    expect(loadingRail).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: "place-action:info:place-a" }),
+        expect.objectContaining({ value: "place-action:menu:place-a" }),
+        expect.objectContaining({ value: "place-action:offers:place-a" }),
+      ]),
+    );
+
+    pending.resolve(canonicalDetail("place-a"));
+    await selection;
+    expect(consumer.rails.at(-1)).toContainEqual(
+      expect.objectContaining({ value: "place-action:info:place-a" }),
+    );
+  });
+
   it("restores detail actions in the language chosen while the group was open", async () => {
     const consumer = actualPlaceDetailConsumer("pt", () => null);
     const a = morroV1SearchCatalog.find(
@@ -849,10 +883,10 @@ describe("selected canonical place detail action", () => {
   });
 
   it.each([
-    ["pt", "Ver detalhes"],
-    ["en", "View details"],
-    ["es", "Ver detalles"],
-    ["he", "הצגת פרטים"],
+    ["pt", "Conhecer este local"],
+    ["en", "Learn about this place"],
+    ["es", "Conocer este lugar"],
+    ["he", "הכירו את המקום"],
   ] as const)(
     "labels only the handled canonical rail in %s",
     async (locale, label) => {
@@ -867,12 +901,6 @@ describe("selected canonical place detail action", () => {
         expect.objectContaining({
           label: "Photo channel label",
           value: "ver fotos",
-        }),
-      );
-      expect(consumer.rails[0]).toContainEqual(
-        expect.objectContaining({
-          label: `ℹ️ ${getV1ExploreLabel("learnMore", locale)}`,
-          value: "saiba mais",
         }),
       );
       const before = consumer.snapshot();
@@ -1457,6 +1485,73 @@ describe("camera return ownership", () => {
 });
 
 describe("explicit details across actual runtime async boundaries", () => {
+  it("restores the original rail after retry success and keeps one retry after a second failure", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", () =>
+      canonicalDetail("place-a"),
+    );
+    const locations = [canonicalLocation("place-a")];
+    consumer.failNextMarkers();
+    consumer.search(locations);
+    await vi.waitFor(() => expect(consumer.mapState()).toBe("error"));
+
+    const originalValues = consumer.rails[0]?.map(({ value }) => value);
+    expect(originalValues).toEqual([
+      "Fale sobre Same place name",
+      "voltar_menu",
+    ]);
+    expect(consumer.rails.at(-1)).toEqual([
+      expect.objectContaining({ value: "__explore_retry__" }),
+    ]);
+
+    const firstRetry = consumer.retryCount() - 1;
+    consumer.retry(firstRetry);
+    await vi.waitFor(() => expect(consumer.mapState()).toBe("ready"));
+    expect(consumer.rails.at(-1)?.map(({ value }) => value)).toEqual(
+      originalValues,
+    );
+    expect(consumer.rails.at(-1)).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: "__explore_retry__" }),
+      ]),
+    );
+
+    consumer.failNextMarkers();
+    consumer.search(locations);
+    await vi.waitFor(() => expect(consumer.mapState()).toBe("error"));
+    const secondRetry = consumer.retryCount() - 1;
+    consumer.failNextMarkers();
+    consumer.retry(secondRetry);
+    await vi.waitFor(() => expect(consumer.mapState()).toBe("error"));
+    expect(consumer.rails.at(-1)).toEqual([
+      expect.objectContaining({ value: "__explore_retry__" }),
+    ]);
+  });
+
+  it("ignores a retained retry callback after a new search interaction", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", () =>
+      canonicalDetail("place-a"),
+    );
+    const first = [canonicalLocation("place-a")];
+    const second = [{ ...canonicalLocation("place-b"), name: "Second place" }];
+    consumer.failNextMarkers();
+    consumer.search(first);
+    await vi.waitFor(() => expect(consumer.mapState()).toBe("error"));
+    const staleRetry = consumer.retryCount() - 1;
+
+    consumer.search(second);
+    await vi.waitFor(() => expect(consumer.mapState()).toBe("ready"));
+    const callsAfterNewInteraction = consumer.providerCalls();
+    const currentRail = consumer.rails.at(-1)?.map(({ value }) => value);
+    consumer.retry(staleRetry);
+    await Promise.resolve();
+
+    expect(consumer.providerCalls()).toBe(callsAfterNewInteraction);
+    expect(consumer.mapState()).toBe("ready");
+    expect(consumer.rails.at(-1)?.map(({ value }) => value)).toEqual(
+      currentRail,
+    );
+  });
+
   it("restores a direct selection's origin when returning to the menu without prior search results", async () => {
     const consumer = actualPlaceDetailConsumer("pt", (id) =>
       canonicalDetail(id),

@@ -79,6 +79,7 @@ export type V1ExploreLabelKey =
   | "programming"
   | "accommodations"
   | "learnMore"
+  | "learnPlace"
   | "viewDetails"
   | "viewHours"
   | "interactiveTour"
@@ -506,6 +507,12 @@ const LABELS: Readonly<Record<V1ExploreLabelKey, Copy>> = Object.freeze({
     en: "Learn more",
     es: "Saber más",
     he: "מידע נוסף",
+  },
+  learnPlace: {
+    pt: "Conhecer este local",
+    en: "Learn about this place",
+    es: "Conocer este lugar",
+    he: "הכירו את המקום",
   },
   viewDetails: {
     pt: "Ver detalhes",
