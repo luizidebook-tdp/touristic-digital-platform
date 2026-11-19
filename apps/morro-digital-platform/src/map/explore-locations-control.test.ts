@@ -444,6 +444,12 @@ interface PlaceDetailConsumer {
   getSelectedMarkerIds(): string[];
   setProjectedPoint(x: number, y: number): void;
   setMapMode(mode: string): void;
+  focusOrigin(scope: "rail" | "results" | "foreign"): unknown;
+  moveOrigin(scope: "rail" | "results" | "foreign"): void;
+  removeOrigin(): void;
+  activeElement(): unknown;
+  categoryTrigger(category: string): unknown;
+  closeByAssistant(): void;
   failNextMarkers(): void;
   providerCalls(): number;
   mapState(): string | undefined;
@@ -507,14 +513,26 @@ function actualPlaceDetailConsumer(
     "returnFromPlaceDetail",
     "placeCamera",
     "backToMenu",
+    "closeActiveExploreStage",
+    "onAssistantCloseRequest",
     "openMarkerMembers",
   ]);
   const declarations: string[] = [];
   const functions: string[] = [];
+  const assignments: string[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isVariableDeclaration(node) && names.has(node.name.getText(ast))) {
-      declarations.push(`const ${node.getText(ast)};`);
+      const kind =
+        node.name.getText(ast) === "closeActiveExploreStage" ? "let" : "const";
+      declarations.push(`${kind} ${node.getText(ast)};`);
     }
+    if (
+      ts.isExpressionStatement(node) &&
+      ts.isBinaryExpression(node.expression) &&
+      node.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      node.expression.left.getText(ast) === "closeActiveExploreStage"
+    )
+      assignments.push(node.getText(ast));
     if (
       ts.isFunctionDeclaration(node) &&
       node.name &&
@@ -525,7 +543,11 @@ function actualPlaceDetailConsumer(
     ts.forEachChild(node, visit);
   };
   visit(ast);
-  if (declarations.length !== names.size || functions.length !== 2)
+  if (
+    declarations.length !== names.size ||
+    functions.length !== 2 ||
+    assignments.length !== 1
+  )
     throw new Error(
       "Expected the actual place detail consumers and locale observer",
     );
@@ -545,23 +567,27 @@ function actualPlaceDetailConsumer(
       let positionRequests=0,holdPosition=false,resolvePosition;
       const elements=new Map();
       class HTMLElement {
-        constructor(){this.dataset={};this.textContent="";this.children=[];this.classList={remove(){},add(){}};}
+        constructor(){this.dataset={};this.textContent="";this.children=[];this.classList={remove(){},add(){}};this.isConnected=false;this.parentNode=null;}
         getAttribute(name){return this[name]??null;}
         setAttribute(name,value){this[name]=value;if(name.startsWith("data-"))this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;}
         removeAttribute(name){delete this[name];if(name.startsWith("data-"))delete this.dataset[name.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())];}
         get childNodes(){return this.children;}
-        appendChild(node){this.children.push(node);node.parentNode=this;node.isConnected=true;if(node.id)elements.set(node.id,node);}
-        prepend(node){this.children.unshift(node);}
+        appendChild(node){if(node.parentNode)node.parentNode.children=node.parentNode.children.filter(child=>child!==node);this.children.push(node);node.parentNode=this;node.isConnected=true;if(node.id)elements.set(node.id,node);}
+        prepend(node){this.children.unshift(node);node.parentNode=this;node.isConnected=this.isConnected;}
         replaceChildren(...nodes){
           this.children=nodes;
+          for(const node of nodes){node.parentNode=this;node.isConnected=this.isConnected;}
           if(this.className==="md-assistant-place-detail-description")this.textContent=nodes.map(node=>node.textContent).join("");
           if(this.id===ASSISTANT_FLOW_MESSAGE_ID){
             messages.push({name:nodes[0]?.textContent??"",description:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.textContent??"",lineBreaks:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.children.filter(n=>n.tagName==="br").length??0});
           }
         }
+        closest(selector){for(let node=this;node;node=node.parentNode){if(selector.split(",").some(part=>part.trim()==="#"+node.id))return node;}return null;}
+        matches(selector){return selector===".morro-explore-marker"&&this.className==="morro-explore-marker";}
+        focus(){document.activeElement=this;}
         addEventListener(){}
-        remove(){if(elements.get(this.id)===this)elements.delete(this.id);if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(node=>node!==this);this.isConnected=false;}
-        replaceWith(node){const parent=this.parentNode;if(parent){parent.children=parent.children.map(child=>child===this?node:child);node.parentNode=parent;node.isConnected=true;}this.isConnected=false;if(node.id)elements.set(node.id,node);}
+        remove(){if(elements.get(this.id)===this)elements.delete(this.id);if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(node=>node!==this);this.parentNode=null;this.isConnected=false;}
+        replaceWith(node){const parent=this.parentNode;if(parent){parent.children=parent.children.map(child=>child===this?node:child);node.parentNode=parent;node.isConnected=parent.isConnected;}this.parentNode=null;this.isConnected=false;if(node.id)elements.set(node.id,node);}
       }
       class HTMLButtonElement extends HTMLElement {}
       class CustomEvent { constructor(type,init) { this.type=type;this.detail=init.detail; } }
@@ -584,11 +610,21 @@ function actualPlaceDetailConsumer(
         addEventListener:(type,listener)=>{const current=listeners.get(type)??new Set();current.add(listener);listeners.set(type,current);},
         removeEventListener:(type,listener)=>listeners.get(type)?.delete(listener),
         dispatchEvent:event=>{events.push(event);for(const listener of listeners.get(event.type)??[])listener(event);}};
-      for(const category of getExploreLocationsCategories(locale))elements.set(getAssistantCategoryButtonId(category.value),new HTMLButtonElement());
+      const categoryRail=new HTMLElement();categoryRail.id="assistant-category-rail";categoryRail.isConnected=true;
+      const resultsRoot=new HTMLElement();resultsRoot.id="assistant-category-results";resultsRoot.isConnected=true;
+      const foreignRoot=new HTMLElement();foreignRoot.id="foreign-assistant-panel";foreignRoot.isConnected=true;
+      const categoryTriggers=new Map();
+      for(const category of getExploreLocationsCategories(locale)){
+        const trigger=new HTMLButtonElement();
+        trigger.dataset.assistantCategory=category.value;
+        categoryRail.appendChild(trigger);
+        categoryTriggers.set(category.value,trigger);
+        elements.set(getAssistantCategoryButtonId(category.value),trigger);
+      }
       const assistantMessagesArea=()=>area,hideMainMenu=()=>{};
       const currentLocale=()=>normalizeAssistantVoiceLanguage(document.documentElement.lang);
       const currentCategories=()=>getExploreLocationsCategories(currentLocale());
-      const contextualRailScroll=null,exploreFlowBottomSheet={hide(){},setStatus(){},getState(){return null;}};
+      const contextualRailScroll={querySelector:selector=>categoryTriggers.get(selector.match(/data-assistant-category="([^"]+)"/)?.[1])??null},exploreFlowBottomSheet={hide(){},setStatus(){},getState(){return null;}};
       const UNREGISTERED_COMMERCIAL_ACTION_IDS=new Set();
       const removeAssistantFlowResults=()=>{},requestAssistantOpen=()=>{};
       const renderContextualRail=(_stage,_label,options)=>{rails.push(options);return null;};
@@ -612,8 +648,10 @@ function actualPlaceDetailConsumer(
       const shareActivePlace=()=>{events.push({type:"share-observed",detail:{}});},tourTicketingUrl=()=>null,startImmersiveTour=()=>{},loadHybridGlobalMarkers=()=>{};
       const refreshCategoryPresentation=()=>{},restoreCategoryRail=()=>{},renderExploreRuntimeStatus=()=>{};
       const exploreRuntimeStatusDescriptor=null,immersiveTourController=null;
+      let focusOriginTarget;
       ${functions.join("\n")}
       ${declarations.join("\n")}
+      ${assignments.join("\n")}
       return {document,execute,select:selectLocation,click:handlePlaceAction,readState:stateSnapshot,setFavorites:(value)=>{storedFavorites=value;},refreshSaved:()=>refreshSavedPlaceActions(),rails,messages,events,
         search:locations=>{interactionGeneration+=1;renderSearchPlaces(locations,"Resultados","query");},back:returnFromPlaceDetail,
         openMembers:locations=>{openMarkerMembers(locations);const restore=closeMarkerList;return ()=>restore?.();},
@@ -624,6 +662,12 @@ function actualPlaceDetailConsumer(
         setLocations:locations=>{visibleLocations=locations;datasetCategory="search";},getLocations:()=>visibleLocations,getRenderedLocations:()=>renderedLocations,getFramedLocations:()=>framedLocations,getSelectedMarkerIds:()=>mapMarkerElements.filter(el=>el.dataset.selected==="true").map(el=>el.dataset.markerId),
         failNextMarkers:()=>{markerProviderOutcome="reject";},providerCalls:()=>markerProviderCalls,mapState:()=>elements.get("map")?.dataset.exploreState,retry:index=>{const callback=index===undefined?retryCallbacks.at(-1):retryCallbacks[index];callback?.();},retryCount:()=>retryCallbacks.length,
         listenerCount:type=>listeners.get(type)?.size??0,
+        focusOrigin:scope=>{const roots={rail:categoryRail,results:resultsRoot,foreign:foreignRoot};focusOriginTarget=new HTMLButtonElement();roots[scope].appendChild(focusOriginTarget);focusOriginTarget.focus();return focusOriginTarget;},
+        moveOrigin:scope=>{const roots={rail:categoryRail,results:resultsRoot,foreign:foreignRoot};if(focusOriginTarget)roots[scope].appendChild(focusOriginTarget);},
+        removeOrigin:()=>focusOriginTarget?.remove(),
+        activeElement:()=>document.activeElement,
+        categoryTrigger:category=>categoryTriggers.get(category),
+        closeByAssistant:()=>onAssistantCloseRequest(),
         holdMarkers:()=>{let release;markerProviderReady=new Promise(resolve=>{release=resolve;});return ()=>{markerProviderReady=Promise.resolve();release();};},
         holdPosition:()=>{holdPosition=true;return ()=>{holdPosition=false;resolvePosition?.({coords:{latitude:-13.38,longitude:-38.91}});};},
         changeLocale:locale=>{document.documentElement.lang=locale;localeObserver.callback([{attributeName:"lang"}]);},
@@ -1013,6 +1057,71 @@ describe("selected canonical place detail action", () => {
       latitude: -13.38,
       longitude: -38.91,
     });
+  });
+});
+
+describe("place detail focus ownership", () => {
+  const place = morroV1SearchCatalog.find(
+    (item) => item.name === "Primeira Praia",
+  )!;
+
+  async function openExploreCategory(
+    consumer: PlaceDetailConsumer,
+  ): Promise<void> {
+    expect(
+      await consumer.execute({ type: "open_category", category: "beaches" }),
+    ).toBe(true);
+  }
+
+  it("never captures or restores a connected element from a foreign panel", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", () => null);
+    await openExploreCategory(consumer);
+    const foreign = consumer.focusOrigin("foreign");
+
+    await consumer.select(place);
+    consumer.closeByAssistant();
+
+    expect(consumer.activeElement()).not.toBe(foreign);
+    expect(consumer.activeElement()).toBe(consumer.categoryTrigger("beaches"));
+  });
+
+  it.each(["rail", "results"] as const)(
+    "restores an Explore origin from the %s on close",
+    async (scope) => {
+      const consumer = actualPlaceDetailConsumer("pt", () => null);
+      await openExploreCategory(consumer);
+      const origin = consumer.focusOrigin(scope);
+
+      await consumer.select(place);
+      consumer.closeByAssistant();
+
+      expect(consumer.activeElement()).toBe(origin);
+    },
+  );
+
+  it("does not focus an Explore origin moved into a foreign panel before close", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", () => null);
+    await openExploreCategory(consumer);
+    const origin = consumer.focusOrigin("rail");
+
+    await consumer.select(place);
+    consumer.moveOrigin("foreign");
+    consumer.closeByAssistant();
+
+    expect(consumer.activeElement()).not.toBe(origin);
+    expect(consumer.activeElement()).toBe(consumer.categoryTrigger("beaches"));
+  });
+
+  it("focuses the previous category trigger when the original is removed", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", () => null);
+    await openExploreCategory(consumer);
+    consumer.focusOrigin("rail");
+
+    await consumer.select(place);
+    consumer.removeOrigin();
+    consumer.closeByAssistant();
+
+    expect(consumer.activeElement()).toBe(consumer.categoryTrigger("beaches"));
   });
 });
 

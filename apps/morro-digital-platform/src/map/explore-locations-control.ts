@@ -2186,7 +2186,13 @@ export function installExploreLocationsControl({
     restoreCategoryRail();
     emitStateChange();
     void loadHybridGlobalMarkers();
-    if (restoreFocus && detailOriginFocus?.isConnected) {
+    if (
+      restoreFocus &&
+      detailOriginFocus?.isConnected &&
+      detailOriginFocus.closest(
+        "#assistant-category-rail, #assistant-category-results",
+      )
+    ) {
       detailOriginFocus.focus({ preventScroll: true });
     } else if (restoreFocus && previousCategoryValue) {
       contextualRailScroll
@@ -2597,7 +2603,11 @@ export function installExploreLocationsControl({
       activePlaceLocation === location;
     if (!refreshingLocale && !restoringDetail && activeStage !== "detail") {
       const focused = document.activeElement;
-      placeOriginFocus = focused instanceof HTMLElement ? focused : undefined;
+      placeOriginFocus =
+        focused instanceof HTMLElement &&
+        focused.closest("#assistant-category-rail, #assistant-category-results")
+          ? focused
+          : undefined;
     }
     if (!refreshingLocale && !restoringDetail) {
       if (visibleLocations.length === 0)
