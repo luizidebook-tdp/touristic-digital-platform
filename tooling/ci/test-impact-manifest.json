@@ -82,7 +82,11 @@
         "apps/morro-digital-platform/tooling/payments-",
         "apps/morro-digital-platform/tooling/ticketing-api.mjs",
         "apps/morro-digital-platform/tooling/ticketing-api-startup.test.mjs",
-        "apps/morro-digital-platform/tooling/ticketing-operator-authorization.test.mjs"
+        "apps/morro-digital-platform/tooling/ticketing-operator-authorization.test.mjs",
+        "apps/morro-digital-platform/public/ticketing.js",
+        "apps/morro-digital-platform/public/tickets.html",
+        "apps/morro-digital-platform/public/tour-booking.html",
+        "apps/morro-digital-platform/public/experience.js"
       ],
       "risk": "CRITICAL",
       "dependsOn": ["assistant-conversation", "commerce", "security"],
@@ -553,7 +557,9 @@
         "packages/geospatial/src/infrastructure/mapbox-gl-driver.ts",
         "packages/geospatial/src/infrastructure/mapbox-gl-driver.test.ts",
         "apps/morro-digital-platform/src/ux/place-search-explore-v2-contract.test.ts",
-        "apps/morro-digital-platform/src/map/public-place-catalog-presentation.ts"
+        "apps/morro-digital-platform/src/map/public-place-catalog-presentation.ts",
+        "apps/morro-digital-platform/src/map/explore-location-actions-v1.ts",
+        "apps/morro-digital-platform/src/map/explore-location-actions-v1.test.ts"
       ],
       "risk": "HIGH",
       "dependsOn": [],
@@ -819,7 +825,8 @@
         "apps/morro-digital-platform/src/ux/profile-settings-row-visibility-contract.test.ts",
         "apps/morro-digital-platform/src/ux/css-cascade-contract.ts",
         "turbo.json",
-        "tooling/ci/turbo-entry-css-cache.test.mjs"
+        "tooling/ci/turbo-entry-css-cache.test.mjs",
+        "apps/morro-digital-platform/public/design-system-v2.css"
       ],
       "risk": "HIGH",
       "dependsOn": [],

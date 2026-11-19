@@ -386,6 +386,17 @@ test("catalog and owner panel impact additions preserve all prior rules and cove
     business: ownerBusinessPaths,
     "explore-marker-rendering": [
       "apps/morro-digital-platform/src/map/public-place-catalog-presentation.ts",
+      "apps/morro-digital-platform/src/map/explore-location-actions-v1.ts",
+      "apps/morro-digital-platform/src/map/explore-location-actions-v1.test.ts",
+    ],
+    "entry-css-runtime": [
+      "apps/morro-digital-platform/public/design-system-v2.css",
+    ],
+    payments: [
+      "apps/morro-digital-platform/public/ticketing.js",
+      "apps/morro-digital-platform/public/tickets.html",
+      "apps/morro-digital-platform/public/tour-booking.html",
+      "apps/morro-digital-platform/public/experience.js",
     ],
     "destination-scoped-public-place": [
       "apps/morro-digital-platform/tooling/catalog-platform-runtime.mjs",
@@ -403,4 +414,145 @@ test("catalog and owner panel impact additions preserve all prior rules and cove
     );
   }
   assert.deepEqual(restored, before);
+});
+
+const manualImpactCases = [
+  {
+    domain: "explore-marker-rendering",
+    paths: [
+      "apps/morro-digital-platform/src/map/explore-location-actions-v1.ts",
+      "apps/morro-digital-platform/src/map/explore-location-actions-v1.test.ts",
+    ],
+    reference: "apps/morro-digital-platform/src/map/explore-marker-grouping.ts",
+    risk: "HIGH",
+    suites: ["place-explore-v2-visual-regression.yml"],
+    expected: {
+      needsBrowser: true,
+      needsVisual: true,
+      needsDatabase: false,
+      needsDependencyAudit: false,
+      needsFullSecurity: false,
+      needsFullRegression: false,
+      qualityProfile: "UI_BUGFIX_FAST",
+    },
+  },
+  {
+    domain: "entry-css-runtime",
+    paths: ["apps/morro-digital-platform/public/design-system-v2.css"],
+    reference: "apps/morro-digital-platform/src/map/feature-styles.ts",
+    risk: "HIGH",
+    suites: [
+      "home-discover-manual-conformance.yml",
+      "home-first-run-browser-regression.yml",
+      "morro-performance-budget.yml",
+      "morro-runtime-startup-performance.yml",
+      "navigation-accessibility-baseline.yml",
+      "navigation-turn-by-turn-parity.yml",
+      "place-explore-v2-visual-regression.yml",
+      "pwa-offline-browser-contract.yml",
+    ],
+    expected: {
+      needsBrowser: true,
+      needsVisual: true,
+      needsDatabase: false,
+      needsDependencyAudit: false,
+      needsFullSecurity: false,
+      needsFullRegression: false,
+      qualityProfile: "UI_BUGFIX_FAST",
+    },
+  },
+  {
+    domain: "payments",
+    paths: [
+      "apps/morro-digital-platform/public/ticketing.js",
+      "apps/morro-digital-platform/public/tickets.html",
+      "apps/morro-digital-platform/public/tour-booking.html",
+      "apps/morro-digital-platform/public/experience.js",
+    ],
+    reference: "apps/morro-digital-platform/tooling/ticketing-api.mjs",
+    risk: "CRITICAL",
+    suites: [
+      "commerce-browser-regression.yml",
+      "payments-browser-checkout-contract.yml",
+    ],
+    expected: {
+      needsBrowser: true,
+      needsVisual: true,
+      needsDatabase: true,
+      needsDependencyAudit: true,
+      needsFullSecurity: true,
+      needsFullRegression: true,
+      qualityProfile: "DEEP_PROOF",
+    },
+  },
+];
+
+const manualImpactAliases = (path) => {
+  const separator = path.lastIndexOf("/");
+  const directory = path.slice(0, separator + 1);
+  const basename = path.slice(separator + 1);
+  return [
+    `${path}.bak`,
+    `${path}.old`,
+    `${path}/nested`,
+    `${directory}homonym-${basename}`,
+  ];
+};
+
+test("manual map visual and commerce paths are exact and retain proof floors", () => {
+  for (const definition of manualImpactCases) {
+    for (const path of definition.paths) {
+      const decision = analyzeFiles([path]);
+      assert.equal(decision.classificationBlocked, false, path);
+      assert.deepEqual(decision.unknownFiles, [], path);
+      assert.deepEqual(decision.domains, [definition.domain], path);
+      assert.equal(decision.risk, definition.risk, path);
+      assert.deepEqual(decision.suites, definition.suites, path);
+      for (const [key, value] of Object.entries(definition.expected))
+        assert.equal(decision[key], value, `${path}:${key}`);
+
+      for (const alias of manualImpactAliases(path)) {
+        const rejected = analyzeFiles([alias]);
+        assert.equal(rejected.classificationBlocked, true, alias);
+        assert.deepEqual(rejected.unknownFiles, [alias], alias);
+        assert.deepEqual(rejected.domains, [], alias);
+      }
+    }
+  }
+});
+
+test("manual exact paths compose with existing files without changing gates", () => {
+  for (const definition of manualImpactCases) {
+    for (const path of definition.paths) {
+      const single = analyzeFiles([path]);
+      const composed = analyzeFiles([path, definition.reference]);
+      const { files: singleFiles, ...singleDecision } = single;
+      const { files: composedFiles, ...composedDecision } = composed;
+      assert.deepEqual(composedDecision, singleDecision, path);
+      assert.deepEqual(singleFiles, [path]);
+      assert.deepEqual(composedFiles, [path, definition.reference]);
+    }
+  }
+
+  const existingI18n = analyzeFiles([
+    "apps/morro-digital-platform/src/map/explore-v1-i18n.test.ts",
+  ]);
+  const composedI18n = analyzeFiles([
+    "apps/morro-digital-platform/src/map/explore-v1-i18n.test.ts",
+    manualImpactCases[0].paths[0],
+  ]);
+  assert.ok(
+    composedI18n.domains.includes("discover-controls-and-filter-labels"),
+  );
+  assert.ok(composedI18n.domains.includes("explore-marker-rendering"));
+  for (const key of [
+    "needsBrowser",
+    "needsVisual",
+    "needsDatabase",
+    "needsDependencyAudit",
+    "needsFullSecurity",
+    "needsFullRegression",
+    "qualityProfile",
+  ])
+    assert.equal(composedI18n[key], existingI18n[key], `i18n:${key}`);
 });
