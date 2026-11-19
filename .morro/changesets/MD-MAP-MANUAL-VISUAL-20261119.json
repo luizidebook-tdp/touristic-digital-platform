@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-MAP-MANUAL-VISUAL-20261119",
+  "objective": "align-active-tourist-panel-and-impact-admission-with-approved-ux-manual",
+  "baseSha": "a7599dba6d03eead7a89d7965f5b11a087379554",
+  "branch": "fix/map-manual-visual-governed-20261119",
+  "state": "IMPLEMENTING",
+  "risk": "high",
+  "scope": "DESTINATION:MORRO",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-MAP-MANUAL-VISUAL-20261119.json",
+      "apps/morro-digital-platform/public/design-system-v2.css",
+      "apps/morro-digital-platform/public/tourist-shell-v2.css",
+      "apps/morro-digital-platform/public/explore-locations.css",
+      "tooling/ci/entry-css-manifest.json",
+      "tooling/ci/test-impact-manifest.json",
+      "tooling/ci/impact-analyzer-exact-path.test.mjs",
+      "tooling/ci/manual-map-visual.contract.mjs",
+      "apps/morro-digital-platform/src/ux/premium-ux-mode.test.ts"
+    ],
+    "contracts": []
+  },
+  "reads": { "contracts": ["TDP-CONTROL-PLANE-V3.2"] },
+  "produces": { "events": [], "routes": [] },
+  "database": { "tables": [] },
+  "auth": { "capabilities": [] },
+  "dependencies": [],
+  "requiredEvidence": [
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "dependencies",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": { "maxCommands": 1, "maxSeconds": 600 },
+    "commands": [
+      {
+        "id": "tourist-style-and-impact-authority",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/ci/build-entry-css.test.mjs",
+          "tooling/ci/impact-analyzer-exact-path.test.mjs"
+        ],
+        "timeoutSeconds": 600
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
