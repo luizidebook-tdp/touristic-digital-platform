@@ -230,7 +230,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "fix/map-active-sheet-manual-20261120",
-      "baseSha": "e501df2633c2edbc3f3b4bbfaabacffa3f414c3f",
+      "baseSha": "ee414640416039def34d5db508e21df695eb8fe6",
       "paths": [
         ".morro/changesets/MD-MAP-ACTIVE-SHEET-20261120.json",
         "apps/morro-digital-platform/src/map/explore-flow-bottom-sheet.test.ts",
