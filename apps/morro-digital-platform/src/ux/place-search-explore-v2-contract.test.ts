@@ -213,7 +213,11 @@ describe("Place + Search/Explore V2 contract", () => {
       expect(flow).toContain(`"${state}"`);
     }
     expect(flow).toContain("explore-flow-sheet-status-skeleton");
-    expect(flow).toContain("button.dataset.sheetStep = direction");
+    expect(flow).not.toContain("button.dataset.sheetStep = direction");
+    expect(flow).toContain("createStateButton(document, target, copy)");
+    expect(flow).toContain(
+      'handle.addEventListener("pointercancel", resetDrag)',
+    );
     expect(flow).toContain("button.dataset.sheetStateTarget = state");
     expect(flow).toContain('if (kind === "tour")');
     expect(flow).toContain("rebuildStateControls(presentation.kind)");
