@@ -4,7 +4,7 @@
   "objective": "register-control-center-shell-browser-contract-under-auth-ownership-and-verify-five-manual-roots",
   "baseSha": "a5c957460e0ec440275c6523c96032636b073955",
   "branch": "chore/register-control-center-browser-contract-claim-20261120",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
