@@ -38,6 +38,61 @@ const requiredItems = [
   "Configurações",
 ];
 
+const manualRootSubmenus = {
+  "Visão geral": ["Resumo", "Indicadores", "Pendências", "Atividade recente"],
+  Destino: [
+    "Resumo do destino",
+    "Informações",
+    "Locais e conteúdo",
+    "Empresas",
+    "Configurações",
+  ],
+  CRM: [
+    "Funil de vendas",
+    "Empresas e contatos",
+    "Planos e propostas",
+    "Contratos e renovações",
+  ],
+  Afiliados: [
+    "Participantes",
+    "Indicações e conversões",
+    "Comissões",
+    "Configurações",
+    "Minha participação",
+  ],
+  Plataforma: [
+    "Usuários e acessos",
+    "Configurações gerais",
+    "Integrações",
+    "Auditoria",
+    "Sistema / Atendimento",
+  ],
+};
+
+const shortcutViews = {
+  global: "overview",
+  overview: "overview",
+  businesses: "businesses",
+  users: "users",
+  affiliates: "affiliates",
+  crm: "crm",
+  products: "products",
+  offers: "products",
+  reservations: "reservations",
+  ticketing: "ticketing",
+  checkin: "ticketing",
+  orders: "orders",
+  payments: "financial",
+  refunds: "financial",
+  commissions: "financial",
+  support: "support",
+  audit: "audit",
+  system: "system",
+  settings: "settings",
+};
+
+const unavailableShortcuts = ["integrations"];
+
 const viewports = [
   { width: 1440, height: 900, label: "1440" },
   { width: 1280, height: 800, label: "1280" },
@@ -64,7 +119,220 @@ async function login(page) {
   await page
     .locator("#app:not([hidden])")
     .waitFor({ state: "visible", timeout: 15000 });
-  await page.locator(".nav-group").first().waitFor({ timeout: 10000 });
+  await page
+    .locator("#main-nav [data-shell-key], #main-nav [aria-expanded]")
+    .first()
+    .waitFor({ timeout: 10000 });
+}
+
+async function inspectNavigation(page, evidence) {
+  const nav = page.locator("#main-nav");
+  const destinationRoot = nav.getByRole("button", {
+    name: "Destino",
+    exact: true,
+  });
+
+  if ((await destinationRoot.count()) === 0) {
+    for (const group of requiredGroups) {
+      const count = await page
+        .locator(".nav-group-label", { hasText: group })
+        .count();
+      if (count !== 1) throw new Error(`Missing nav group: ${group}`);
+      evidence.groups.push(group);
+    }
+
+    for (const item of requiredItems) {
+      const count = await nav
+        .getByRole("button", { name: item, exact: true })
+        .count();
+      if (count !== 1)
+        throw new Error(`Missing or duplicate nav item: ${item}`);
+      evidence.items.push(item);
+    }
+    evidence.navigationMode = "legacy-compatible";
+    return "legacy";
+  }
+
+  const rootControls = nav.locator("button[aria-expanded]");
+  const rootControlCount = await rootControls.count();
+  if (rootControlCount !== Object.keys(manualRootSubmenus).length) {
+    throw new Error(
+      `Expected exactly five expandable roots, received ${rootControlCount}`,
+    );
+  }
+
+  const rootNames = await rootControls.evaluateAll((nodes) =>
+    nodes.map((node) =>
+      (node.getAttribute("aria-label") || node.innerText)
+        .trim()
+        .replace(/\s+/gu, " "),
+    ),
+  );
+  if (
+    JSON.stringify([...rootNames].sort()) !==
+    JSON.stringify(Object.keys(manualRootSubmenus).sort())
+  ) {
+    throw new Error(
+      `Unexpected Control Center roots: ${JSON.stringify(rootNames)}`,
+    );
+  }
+  if (
+    (await nav
+      .getByRole("button", { name: "Empresa selecionada", exact: true })
+      .count()) !== 0
+  ) {
+    throw new Error('"Empresa selecionada" must not become a navigation root');
+  }
+
+  const initialHash = new URL(page.url()).hash;
+  const initialOverview = !initialHash || initialHash === "#overview";
+  const activeRoutes = nav.locator('[aria-current="page"]');
+  if (initialOverview && (await activeRoutes.count()) !== 1) {
+    throw new Error("Overview route must have exactly one active nav item");
+  }
+
+  for (const [rootName, expectedChildren] of Object.entries(
+    manualRootSubmenus,
+  )) {
+    const root = nav.getByRole("button", { name: rootName, exact: true });
+    if ((await root.count()) !== 1) {
+      throw new Error(`Missing or duplicate manual root: ${rootName}`);
+    }
+    let expanded = await root.getAttribute("aria-expanded");
+    if (!["true", "false"].includes(expanded)) {
+      throw new Error(`Root lacks aria-expanded state: ${rootName}`);
+    }
+    if (rootName === "Visão geral" && initialOverview && expanded !== "true") {
+      throw new Error("Active overview route did not expand its root ancestor");
+    }
+    if (expanded !== "true") {
+      await root.click();
+      expanded = await root.getAttribute("aria-expanded");
+      if (expanded !== "true") {
+        throw new Error(`Root did not expand its submenu: ${rootName}`);
+      }
+    }
+    if ((await activeRoutes.count()) !== 1) {
+      throw new Error(`Route lost its unique active item under ${rootName}`);
+    }
+
+    const children = await root.evaluate((button) => {
+      const navNode = button.closest("nav");
+      const controlledId = button.getAttribute("aria-controls");
+      let region = controlledId ? document.getElementById(controlledId) : null;
+      if (region && !navNode.contains(region)) region = null;
+      if (!region) {
+        for (
+          let parent = button.parentElement;
+          parent && parent !== navNode;
+          parent = parent.parentElement
+        ) {
+          if (parent.querySelector("a[href]")) {
+            region = parent;
+            break;
+          }
+        }
+      }
+      if (!region) return [];
+      return [...region.querySelectorAll("a[href]")].map((link) => ({
+        label: link.innerText.trim().replace(/\s+/gu, " "),
+        href: link.getAttribute("href"),
+        visible:
+          link.getClientRects().length > 0 &&
+          getComputedStyle(link).visibility !== "hidden" &&
+          !link.closest('[hidden], [aria-hidden="true"]'),
+      }));
+    });
+
+    for (const child of expectedChildren) {
+      const matches = children.filter((item) => item.label === child);
+      if (
+        matches.length !== 1 ||
+        !matches[0].visible ||
+        !matches[0].href ||
+        matches[0].href === "#"
+      ) {
+        throw new Error(
+          `Missing, hidden, or unrouted submenu link ${rootName} → ${child}`,
+        );
+      }
+    }
+    const focusKeepsRootExpanded = await root.evaluate(
+      (button, firstChildLabel) => {
+        const navNode = button.closest("nav");
+        const controlledId = button.getAttribute("aria-controls");
+        let region = controlledId
+          ? document.getElementById(controlledId)
+          : null;
+        if (region && !navNode.contains(region)) region = null;
+        if (!region) {
+          for (
+            let parent = button.parentElement;
+            parent && parent !== navNode;
+            parent = parent.parentElement
+          ) {
+            if (parent.querySelector("a[href]")) {
+              region = parent;
+              break;
+            }
+          }
+        }
+        const link = [...(region?.querySelectorAll("a[href]") ?? [])].find(
+          (item) =>
+            item.innerText.trim().replace(/\s+/gu, " ") === firstChildLabel,
+        );
+        if (!link) return false;
+        link.focus();
+        return (
+          document.activeElement === link &&
+          button.getAttribute("aria-expanded") === "true"
+        );
+      },
+      expectedChildren[0],
+    );
+    if (!focusKeepsRootExpanded) {
+      throw new Error(`Focusing a submenu link collapsed ${rootName}`);
+    }
+    evidence.groups.push(rootName);
+    evidence.manualSubmenus ??= {};
+    evidence.manualSubmenus[rootName] = expectedChildren;
+  }
+
+  const shortcutNodes = await nav
+    .locator("[data-shell-key]")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        key: node.getAttribute("data-shell-key"),
+        view: node.getAttribute("data-shell-view"),
+        disabled:
+          Boolean(node.disabled) ||
+          node.getAttribute("aria-disabled") === "true",
+      })),
+    );
+  for (const [key, view] of Object.entries(shortcutViews)) {
+    const matches = shortcutNodes.filter((node) => node.key === key);
+    if (matches.length !== 1 || matches[0].view !== view) {
+      throw new Error(`Legacy shortcut route changed for ${key}`);
+    }
+  }
+  for (const key of unavailableShortcuts) {
+    const matches = shortcutNodes.filter((node) => node.key === key);
+    if (
+      matches.length !== 1 ||
+      !matches[0].disabled ||
+      matches[0].view !== null
+    ) {
+      throw new Error(`Unavailable shortcut became actionable: ${key}`);
+    }
+  }
+
+  evidence.items.push(...Object.keys(shortcutViews), ...unavailableShortcuts);
+  evidence.navigationMode = "manual-five-roots";
+  await page.evaluate(() => {
+    if (location.hash !== "#overview") location.hash = "#overview";
+  });
+  await page.waitForFunction(() => location.hash === "#overview");
+  return "manual";
 }
 
 (async () => {
@@ -87,23 +355,8 @@ async function login(page) {
 
     await login(page);
 
-    for (const group of requiredGroups) {
-      const count = await page
-        .locator(".nav-group-label", { hasText: group })
-        .count();
-      if (count !== 1) throw new Error(`Missing nav group: ${group}`);
-      evidence.groups.push(group);
-    }
-
+    const navigationMode = await inspectNavigation(page, evidence);
     const sidebarNav = page.locator("#main-nav");
-    for (const item of requiredItems) {
-      const count = await sidebarNav
-        .getByRole("button", { name: item, exact: true })
-        .count();
-      if (count !== 1)
-        throw new Error(`Missing or duplicate nav item: ${item}`);
-      evidence.items.push(item);
-    }
 
     const topbarSelectors = [
       ".brand-wordmark",
@@ -125,7 +378,7 @@ async function login(page) {
     const shellVisual = await page.evaluate(() => {
       const sidebar = document.querySelector("#sidebar");
       const topbar = document.querySelector(".control-center-topbar");
-      const active = document.querySelector('.nav-item[aria-current="page"]');
+      const active = document.querySelector('#main-nav [aria-current="page"]');
       const nav = document.querySelector("#main-nav");
       const sidebarStyle = getComputedStyle(sidebar);
       const topbarStyle = getComputedStyle(topbar);
@@ -156,17 +409,23 @@ async function login(page) {
         `Sidebar does not start below topbar: ${shellVisual.sidebarTop}`,
       );
     }
-    if (shellVisual.navScrollHeight <= shellVisual.navClientHeight) {
+    if (
+      navigationMode === "legacy" &&
+      shellVisual.navScrollHeight <= shellVisual.navClientHeight
+    ) {
       throw new Error(
         `Sidebar scroll contract not exercised: ${JSON.stringify(shellVisual)}`,
       );
     }
     evidence.shell = shellVisual;
 
-    const lastItem = page.getByRole("button", {
-      name: "Configurações",
-      exact: true,
-    });
+    const lastItem =
+      navigationMode === "legacy"
+        ? page.getByRole("button", { name: "Configurações", exact: true })
+        : page.getByRole("link", {
+            name: "Sistema / Atendimento",
+            exact: true,
+          });
     await lastItem.focus();
     const focusVisibility = await lastItem.evaluate((node) => {
       const nav = document.querySelector("#main-nav").getBoundingClientRect();
@@ -185,30 +444,42 @@ async function login(page) {
     }
     evidence.keyboard.push("focused-item-scrolls-into-view");
 
-    await page.getByRole("button", { name: "Reembolsos", exact: true }).click();
-    await page.waitForURL((url) => url.hash === "#financial", {
-      timeout: 5000,
-    });
-    await page
-      .locator('#main-nav [data-shell-key="refunds"][aria-current="page"]')
-      .waitFor({ state: "visible", timeout: 5000 });
-    const currentLabels = await page
-      .locator('.nav-item[aria-current="page"]')
-      .allTextContents();
-    if (
-      currentLabels.length !== 1 ||
-      currentLabels[0].trim() !== "Reembolsos"
-    ) {
-      throw new Error(
-        `Alias active state is incorrect: ${JSON.stringify(currentLabels)}`,
+    if (navigationMode === "legacy") {
+      await page
+        .getByRole("button", { name: "Reembolsos", exact: true })
+        .click();
+      await page.waitForURL((url) => url.hash === "#financial", {
+        timeout: 5000,
+      });
+      await page
+        .locator('#main-nav [data-shell-key="refunds"][aria-current="page"]')
+        .waitFor({ state: "visible", timeout: 5000 });
+      const currentLabels = await page
+        .locator('#main-nav [aria-current="page"]')
+        .allTextContents();
+      if (
+        currentLabels.length !== 1 ||
+        currentLabels[0].trim() !== "Reembolsos"
+      ) {
+        throw new Error(
+          `Alias active state is incorrect: ${JSON.stringify(currentLabels)}`,
+        );
+      }
+      await page.getByRole("heading", { name: "Financeiro" }).waitFor();
+      evidence.keyboard.push("alias-route-active-state");
+      await sidebarNav
+        .getByRole("button", { name: "Visão Global", exact: true })
+        .click();
+    } else {
+      await page.waitForFunction(() => location.hash === "#overview");
+      const activeOverview = sidebarNav.locator(
+        '[data-shell-view="overview"][aria-current="page"]',
       );
+      if ((await activeOverview.count()) !== 1) {
+        throw new Error("Overview route did not retain one active shortcut");
+      }
+      evidence.keyboard.push("manual-root-and-shortcut-route-contract");
     }
-    await page.getByRole("heading", { name: "Financeiro" }).waitFor();
-    evidence.keyboard.push("alias-route-active-state");
-
-    await sidebarNav
-      .getByRole("button", { name: "Visão Global", exact: true })
-      .click();
     await page.locator("[data-home-overview-v1]").waitFor();
     await page
       .getByRole("heading", { name: /^(Bom dia|Boa tarde|Boa noite), / })
@@ -378,6 +649,9 @@ async function login(page) {
     await browser.close();
   }
 })().catch((error) => {
-  console.error("Control Center Shell V1 browser contract failed");
+  console.error(
+    "Control Center Shell V1 browser contract failed",
+    error?.message,
+  );
   process.exit(1);
 });
