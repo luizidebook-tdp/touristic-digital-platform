@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-CC-SHELL-NAVIGATION-20261120",
+  "objective": "control-center-shell-five-root-navigation-contextual-submenus-preserved-routes-shortcuts",
+  "baseSha": "5a63c4b19db9515ac1b95756794458f80c8e2e50",
+  "branch": "chore/register-control-center-shell-claim-20261120",
+  "state": "IMPLEMENTING",
+  "risk": "critical",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-CC-SHELL-NAVIGATION-20261120.json",
+      "apps/control-center/public/control-center-shell-v1.js",
+      "apps/control-center/public/control-center-shell-v1.css",
+      "apps/morro-digital-platform/src/ux/control-center-shell-sidebar-v1-contract.test.ts",
+      "tooling/ci/control-center-shell-navigation.contract.mjs"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2", "platform-authz"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "owner-consent-task-generation",
+    "full-quality",
+    "domain-invariants",
+    "integration",
+    "exact-head-release-gates",
+    "automated-independent-proof",
+    "exact-head-identity",
+    "five-manual-roots-and-contextual-submenus",
+    "route-preservation",
+    "shortcut-preservation",
+    "mobile-accessibility-contract",
+    "no-auth-api-session-changes",
+    "A04-A05-excluded"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "dependencies",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 600
+    },
+    "commands": [
+      {
+        "id": "control-center-shell-navigation-contract",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/ci/control-center-shell-navigation.contract.mjs"
+        ],
+        "timeoutSeconds": 600
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity",
+      "exact-head-release-gates"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
