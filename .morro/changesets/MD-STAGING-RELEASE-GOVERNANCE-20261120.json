@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-STAGING-RELEASE-GOVERNANCE-20261120",
+  "objective": "reconcile-release-state-with-live-staging-and-render-target-policy-without-promotion",
+  "baseSha": "04e0184c6857f19334cfe0454d29dbb8edaeef4c",
+  "branch": "chore/register-staging-release-claim-20261120",
+  "state": "IMPLEMENTING",
+  "risk": "critical",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-STAGING-RELEASE-GOVERNANCE-20261120.json",
+      ".github/workflows/staging-oci-promotion.yml",
+      ".github/morro-control/release-state.json",
+      "docs/operations/RENDER-RELEASE-TARGET-GOVERNANCE.md",
+      "tooling/quality/release-target-governance.test.mjs",
+      "tooling/quality/render-staging-blueprint.test.mjs",
+      "tooling/ci/staging-oci-deployment-evidence.mjs",
+      "tooling/ci/staging-oci-deployment-evidence.test.mjs"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "owner-consent-task-generation",
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "render-readback",
+    "workflow-registration-readback",
+    "automated-independent-proof",
+    "exact-head-identity",
+    "no-deploy-proof"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "render:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "dependencies",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 600
+    },
+    "commands": [
+      {
+        "id": "release-target-and-staging-evidence-contracts",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/quality/release-target-governance.test.mjs",
+          "tooling/quality/render-staging-blueprint.test.mjs",
+          "tooling/ci/staging-oci-deployment-evidence.test.mjs"
+        ],
+        "timeoutSeconds": 600
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
