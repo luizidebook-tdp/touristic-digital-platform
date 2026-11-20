@@ -225,6 +225,28 @@
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-20T01:00:00.000Z"
+    },
+    "MD-MAP-ACTIVE-SHEET-20261120": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "fix/map-active-sheet-manual-20261120",
+      "baseSha": "e501df2633c2edbc3f3b4bbfaabacffa3f414c3f",
+      "paths": [
+        ".morro/changesets/MD-MAP-ACTIVE-SHEET-20261120.json",
+        "apps/morro-digital-platform/src/map/explore-flow-bottom-sheet.test.ts",
+        "apps/morro-digital-platform/src/map/explore-flow-bottom-sheet.ts",
+        "apps/morro-digital-platform/src/map/explore-location-actions-v1.test.ts",
+        "apps/morro-digital-platform/src/map/explore-location-actions-v1.ts",
+        "apps/morro-digital-platform/src/map/explore-locations-control.test.ts",
+        "apps/morro-digital-platform/src/map/explore-locations-control.ts",
+        "apps/morro-digital-platform/src/map/explore-v1-i18n.test.ts",
+        "apps/morro-digital-platform/src/map/explore-v1-i18n.ts",
+        "apps/morro-digital-platform/src/ux/place-search-explore-v2-contract.test.ts"
+      ],
+      "domains": ["map"],
+      "risk": "P1",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-21T14:00:00.000Z"
     }
   }
 }

@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-MAP-ACTIVE-SHEET-20261120",
+  "objective": "align-active-map-sheet-state-controls-and-context-recovery-with-approved-map-manual",
+  "baseSha": "e501df2633c2edbc3f3b4bbfaabacffa3f414c3f",
+  "branch": "fix/map-active-sheet-manual-20261120",
+  "state": "IMPLEMENTING",
+  "risk": "high",
+  "scope": "DESTINATION:MORRO",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-MAP-ACTIVE-SHEET-20261120.json",
+      "apps/morro-digital-platform/src/map/explore-flow-bottom-sheet.test.ts",
+      "apps/morro-digital-platform/src/map/explore-flow-bottom-sheet.ts",
+      "apps/morro-digital-platform/src/map/explore-location-actions-v1.test.ts",
+      "apps/morro-digital-platform/src/map/explore-location-actions-v1.ts",
+      "apps/morro-digital-platform/src/map/explore-locations-control.test.ts",
+      "apps/morro-digital-platform/src/map/explore-locations-control.ts",
+      "apps/morro-digital-platform/src/map/explore-v1-i18n.test.ts",
+      "apps/morro-digital-platform/src/map/explore-v1-i18n.ts",
+      "apps/morro-digital-platform/src/ux/place-search-explore-v2-contract.test.ts"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": ["TDP-CONTROL-PLANE-V3.2"]
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "owner-consent-task-generation",
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": [
+      "changeset",
+      "git-identity",
+      "ownership",
+      "contracts",
+      "dependencies",
+      "proof-plan"
+    ]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 600
+    },
+    "commands": [
+      {
+        "id": "active-map-detail-and-impact-contracts",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/ci/explore-detail-browser-proof.test.mjs",
+          "tooling/ci/impact-analyzer-exact-path.test.mjs"
+        ],
+        "timeoutSeconds": 600
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
