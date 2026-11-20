@@ -289,7 +289,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "chore/register-control-center-browser-contract-claim-20261120",
-      "baseSha": "93af658e61775c1e6c57205cc1ca268c08c2bfbc",
+      "baseSha": "a5c957460e0ec440275c6523c96032636b073955",
       "paths": [
         ".morro/changesets/MD-CC-SHELL-BROWSER-CONTRACT-20261120.json",
         ".morro/ownership.json",
