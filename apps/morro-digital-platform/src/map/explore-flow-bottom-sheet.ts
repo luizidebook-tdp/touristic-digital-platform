@@ -40,6 +40,9 @@ type SheetCopy = Readonly<{
   unavailable: string;
   loadFailed: string;
   retry: string;
+  stateControls: string;
+  exploreActions: string;
+  tourActions: string;
   states: Readonly<Record<ExploreFlowBottomSheetState, string>>;
 }>;
 const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
@@ -51,6 +54,9 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
       "Não foi possível atualizar o mapa agora. Seus filtros foram preservados.",
     loadFailed: "Não foi possível carregar.",
     retry: "Tentar novamente",
+    stateControls: "Controles de altura do painel",
+    exploreActions: "Ações do local",
+    tourActions: "Ações do passeio",
     states: {
       peek: "Mostrar resumo",
       half: "Mostrar conteúdo principal",
@@ -65,6 +71,9 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
       "The map could not be updated right now. Your filters were preserved.",
     loadFailed: "Could not load.",
     retry: "Try again",
+    stateControls: "Panel height controls",
+    exploreActions: "Place actions",
+    tourActions: "Tour actions",
     states: {
       peek: "Show summary",
       half: "Show main content",
@@ -79,6 +88,9 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
       "No fue posible actualizar el mapa ahora. Tus filtros se conservaron.",
     loadFailed: "No se pudo cargar.",
     retry: "Reintentar",
+    stateControls: "Controles de altura del panel",
+    exploreActions: "Acciones del lugar",
+    tourActions: "Acciones del paseo",
     states: {
       peek: "Mostrar resumen",
       half: "Mostrar contenido principal",
@@ -92,6 +104,9 @@ const copyByLanguage = Object.freeze<Record<string, SheetCopy>>({
     unavailable: "לא ניתן לעדכן את המפה כרגע. המסננים שלך נשמרו.",
     loadFailed: "לא ניתן לטעון.",
     retry: "נסו שוב",
+    stateControls: "פקדי גובה הלוח",
+    exploreActions: "פעולות המקום",
+    tourActions: "פעולות הסיור",
     states: {
       peek: "הצגת תקציר",
       half: "הצגת התוכן הראשי",
@@ -193,6 +208,7 @@ export function installExploreFlowBottomSheet({
   const heading = document.createElement("h2");
   heading.id = "explore-flow-bottom-sheet-title";
   heading.className = "explore-flow-sheet-title";
+  heading.tabIndex = -1;
   sheet.setAttribute("aria-labelledby", heading.id);
   sheet.tabIndex = -1;
 
@@ -215,6 +231,35 @@ export function installExploreFlowBottomSheet({
   let dismissHandler: (() => void) | undefined;
   let activeKind: ExploreFlowBottomSheetKind | undefined;
   let compatibilityMessageSource: HTMLElement | undefined;
+  let returnFocusTarget: HTMLElement | null = null;
+  const canRestoreFocus = (
+    target: HTMLElement | null,
+  ): target is HTMLElement => {
+    if (!target || !target.isConnected || target === document.body)
+      return false;
+    for (
+      let ancestor: HTMLElement | null = target;
+      ancestor;
+      ancestor = ancestor.parentElement
+    ) {
+      if (
+        ancestor.hidden ||
+        ancestor.hasAttribute("inert") ||
+        (ancestor as HTMLElement & { inert?: boolean }).inert === true ||
+        ancestor.getAttribute("aria-hidden") === "true" ||
+        ancestor.getAttribute("aria-disabled") === "true"
+      )
+        return false;
+      const style = document.defaultView?.getComputedStyle(ancestor);
+      if (
+        style?.display === "none" ||
+        style?.visibility === "hidden" ||
+        style?.visibility === "collapse"
+      )
+        return false;
+    }
+    return !target.matches(":disabled");
+  };
 
   const clearCompatibilityMessageSource = (): void => {
     if (!compatibilityMessageSource) return;
@@ -332,6 +377,11 @@ export function installExploreFlowBottomSheet({
 
   const rebuildStateControls = (kind: ExploreFlowBottomSheetKind): void => {
     const copy = currentCopy(document);
+    stateControls.setAttribute("aria-label", copy.stateControls);
+    actions.setAttribute(
+      "aria-label",
+      kind === "tour" ? copy.tourActions : copy.exploreActions,
+    );
     stateControls.replaceChildren();
     if (kind === "tour") {
       for (const target of ["peek", "half", "full"] as const) {
@@ -352,6 +402,7 @@ export function installExploreFlowBottomSheet({
   };
 
   const render = (presentation: ExploreFlowBottomSheetPresentation): void => {
+    const opening = sheet.classList.contains("hidden");
     dismissHandler = presentation.onDismiss;
     clearCompatibilityMessageSource();
     compatibilityMessageSource = presentation.messageSource;
@@ -398,6 +449,7 @@ export function installExploreFlowBottomSheet({
 
     sheet.classList.remove("hidden");
     sheet.setAttribute("aria-hidden", "false");
+    if (opening) heading.focus({ preventScroll: true });
   };
 
   close.addEventListener("click", () => dismissHandler?.());
@@ -405,6 +457,15 @@ export function installExploreFlowBottomSheet({
   return Object.freeze({
     show(presentation: ExploreFlowBottomSheetPresentation): void {
       if (destroyed) return;
+      if (sheet.classList.contains("hidden")) {
+        const activeElement = document.activeElement;
+        returnFocusTarget =
+          activeElement instanceof HTMLElement &&
+          !sheet.contains(activeElement) &&
+          canRestoreFocus(activeElement)
+            ? activeElement
+            : null;
+      }
       featureStyles.run(() => {
         if (!destroyed) render(presentation);
       });
@@ -414,10 +475,14 @@ export function installExploreFlowBottomSheet({
       if (destroyed) return;
       dismissHandler = undefined;
       activeKind = undefined;
+      const focusTarget = returnFocusTarget;
+      returnFocusTarget = null;
       clearCompatibilityMessageSource();
       sheet.classList.add("hidden");
       sheet.setAttribute("aria-hidden", "true");
       delete sheet.dataset.flowKind;
+      if (canRestoreFocus(focusTarget) && !sheet.contains(focusTarget))
+        focusTarget.focus({ preventScroll: true });
     },
     setState,
     getState(): ExploreFlowBottomSheetState {
@@ -431,6 +496,7 @@ export function installExploreFlowBottomSheet({
       destroyed = true;
       dismissHandler = undefined;
       activeKind = undefined;
+      returnFocusTarget = null;
       sheet.remove();
     },
   });
