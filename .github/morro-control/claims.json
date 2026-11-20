@@ -210,35 +210,6 @@
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-19T23:00:00.000Z"
     },
-    "MD-OWNER-BUSINESS-AFFILIATE-20261118": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "feat/control-center-owner-panels-20261118",
-      "baseSha": "d27fcfaac97cddd615ca01de9dd238bcc96c1aa1",
-      "paths": [
-        ".morro/changesets/MD-OWNER-BUSINESS-AFFILIATE-20261118.json",
-        ".morro/ownership.json",
-        "apps/morro-digital-platform/src/business-dashboard-client.ts",
-        "apps/morro-digital-platform/src/business-dashboard-client.test.ts",
-        "apps/morro-digital-platform/src/morro-pro-business-management.ts",
-        "apps/morro-digital-platform/src/morro-pro-business-management.test.ts",
-        "apps/morro-digital-platform/src/business-dashboard-surface.ts",
-        "apps/morro-digital-platform/src/affiliate-portal-client.ts",
-        "apps/morro-digital-platform/src/affiliate-portal-client.test.ts",
-        "apps/morro-digital-platform/src/affiliate-portal-entry.ts",
-        "apps/morro-digital-platform/tooling/admin-api.mjs",
-        "apps/morro-digital-platform/tooling/admin-api.test.mjs",
-        "apps/morro-digital-platform/tooling/auth-api.mjs",
-        "apps/morro-digital-platform/tooling/affiliates-api.mjs",
-        "apps/morro-digital-platform/tooling/affiliates-api.test.mjs",
-        "apps/morro-digital-platform/public/affiliate-portal.html",
-        "docs/architecture/MORRO-PRO-BUSINESS-SELF-SERVICE.md"
-      ],
-      "domains": ["auth", "business"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-20T11:00:00.000Z"
-    },
     "MD-MAP-HOME-SEARCH-PROOF-20261119": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
