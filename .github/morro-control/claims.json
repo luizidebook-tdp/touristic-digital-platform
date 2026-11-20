@@ -225,27 +225,6 @@
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-20T01:00:00.000Z"
-    },
-    "MD-MAP-MANUAL-VISUAL-20261119": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "fix/map-manual-visual-governed-20261119",
-      "baseSha": "6546dbee0adab53c853fbd8b16fe51d974040d8f",
-      "paths": [
-        ".morro/changesets/MD-MAP-MANUAL-VISUAL-20261119.json",
-        "apps/morro-digital-platform/public/design-system-v2.css",
-        "apps/morro-digital-platform/public/tourist-shell-v2.css",
-        "apps/morro-digital-platform/public/explore-locations.css",
-        "tooling/ci/entry-css-manifest.json",
-        "tooling/ci/test-impact-manifest.json",
-        "tooling/ci/impact-analyzer-exact-path.test.mjs",
-        "tooling/ci/manual-map-visual.contract.mjs",
-        "apps/morro-digital-platform/src/ux/premium-ux-mode.test.ts"
-      ],
-      "domains": ["map", "ci-release"],
-      "risk": "P1",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-20T08:00:00.000Z"
     }
   }
 }
