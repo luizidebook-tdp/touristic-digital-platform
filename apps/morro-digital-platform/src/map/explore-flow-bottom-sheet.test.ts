@@ -320,6 +320,56 @@ describe("explore flow bottom sheet states", () => {
     expect(document.body.descendants()).not.toContain(toolbar);
   });
 
+  it("restores a reused category message when a dedicated tour returns to filters", () => {
+    const document = createDocument();
+    const controller = installExploreFlowBottomSheet({ document });
+    const dock = new FixtureElement("section");
+    const source = new FixtureElement("div");
+    const message = new FixtureElement("div");
+    message.id = "assistant-category-results-message";
+    document.body.append(dock, source, message);
+    controller.bindDock(dock as unknown as HTMLElement);
+
+    controller.showContextualControls({
+      accessibleLabel: "Filtros",
+      contextKey: "filters:beaches",
+      initialState: "half",
+      onDismiss: () => {},
+    });
+    const handle = elementWithClass(
+      document.body.descendants(),
+      "explore-flow-sheet-drag-handle",
+    )!;
+    handle.listeners.get("pointerdown")!({ clientY: 200, pointerId: 7 });
+
+    controller.show({
+      kind: "tour",
+      accessibleLabel: "Roteiro do passeio",
+      source: source as unknown as HTMLElement,
+      messageSource: message as unknown as HTMLElement,
+      onDismiss: () => {},
+    });
+    expect(message.getAttribute("aria-hidden")).toBe("true");
+    expect(message.getAttribute("inert")).toBe("");
+
+    message.setAttribute("aria-hidden", "false");
+    controller.showContextualControls({
+      accessibleLabel: "Filtros",
+      contextKey: "filters:tours",
+      initialState: "half",
+      onDismiss: () => {},
+    });
+    handle.listeners.get("pointerup")!({ clientY: 100, pointerId: 7 });
+
+    expect(message.getAttribute("aria-hidden")).toBe("false");
+    expect(message.getAttribute("inert")).toBeUndefined();
+    expect(dock.dataset.exploreSheetState).toBe("half");
+    expect(dock.querySelectorAll(".explore-flow-sheet-toolbar")).toHaveLength(
+      1,
+    );
+    controller.destroy();
+  });
+
   it("names the failure plainly and keeps the preserved-filter hint", () => {
     const document = createDocument();
     const controller = installExploreFlowBottomSheet({ document });

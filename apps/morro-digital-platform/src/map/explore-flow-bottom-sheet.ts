@@ -156,27 +156,6 @@ function createStateButton(
   return button;
 }
 
-// Kept as a compatibility helper for older structural consumers. The active
-// Explore surface uses the three explicit state buttons above so pointer and
-// keyboard activation have identical transitions.
-function createStepButton(
-  document: Document,
-  direction: "up" | "down",
-  copy: SheetCopy,
-): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "md-icon-button explore-flow-sheet-state-button";
-  button.dataset.sheetStep = direction;
-  button.setAttribute(
-    "aria-label",
-    direction === "up" ? copy.states.full : copy.states.peek,
-  );
-  button.title = direction === "up" ? copy.states.full : copy.states.peek;
-  button.textContent = direction === "up" ? "⌃" : "⌄";
-  return button;
-}
-
 export function installExploreFlowBottomSheet({
   document,
   onStateChange,
@@ -246,7 +225,7 @@ export function installExploreFlowBottomSheet({
     compatibilityMessageSource.classList.remove(
       "explore-flow-message-compat-source",
     );
-    compatibilityMessageSource.removeAttribute("aria-hidden");
+    compatibilityMessageSource.setAttribute("aria-hidden", "false");
     compatibilityMessageSource.removeAttribute("inert");
     compatibilityMessageSource = undefined;
   };
@@ -377,16 +356,14 @@ export function installExploreFlowBottomSheet({
   };
   handle.addEventListener("pointerdown", (event) => {
     if (destroyed || activeKind !== "explore") return;
-    const pointer = event as PointerEvent;
     resetDrag();
-    dragStartY = pointer.clientY;
-    dragPointerId = pointer.pointerId;
-    handle.setPointerCapture?.(pointer.pointerId);
+    dragStartY = event.clientY;
+    dragPointerId = event.pointerId;
+    handle.setPointerCapture?.(event.pointerId);
   });
   handle.addEventListener("pointerup", (event) => {
-    const pointer = event as PointerEvent;
-    if (dragStartY === null || dragPointerId !== pointer.pointerId) return;
-    const delta = pointer.clientY - dragStartY;
+    if (dragStartY === null || dragPointerId !== event.pointerId) return;
+    const delta = event.clientY - dragStartY;
     resetDrag();
     if (Math.abs(delta) < 36) return;
     dragStep(delta < 0 ? "up" : "down");
@@ -419,6 +396,7 @@ export function installExploreFlowBottomSheet({
   };
 
   const render = (presentation: ExploreFlowBottomSheetPresentation): void => {
+    resetDrag();
     dismissHandler = presentation.onDismiss;
     clearCompatibilityMessageSource();
     compatibilityMessageSource = presentation.messageSource;
@@ -506,6 +484,8 @@ export function installExploreFlowBottomSheet({
       if (destroyed) return;
       featureStyles.run(() => {
         if (destroyed) return;
+        resetDrag();
+        clearCompatibilityMessageSource();
         const nextContextKey = presentation.contextKey;
         const sameContext =
           activeKind === "explore" && activeContextKey === nextContextKey;
