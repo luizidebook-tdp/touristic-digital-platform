@@ -195,7 +195,6 @@
         "apps/control-center/public/control-center-home-overview-v1.js",
         "apps/morro-digital-platform/tooling/control-center-home-overview-v1-browser-contract.cjs",
         "apps/morro-digital-platform/tooling/control-center-visual-golden-v1-browser-contract.cjs",
-        "apps/morro-digital-platform/tooling/control-center-shell-v1-browser-contract.cjs",
         "apps/morro-digital-platform/tooling/auth-api.mjs",
         "apps/morro-digital-platform/tooling/auth-api-logout.test.mjs",
         "services/crm/src/crm-storage-adapter.ts",
