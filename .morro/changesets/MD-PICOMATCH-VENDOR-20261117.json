@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-PICOMATCH-VENDOR-20261117",
   "objective": "register-reproducible-picomatch-parser-component-with-explicit-file-ownership-before-dependent-security-override",
-  "baseSha": "e02d438525df6268c0dcf20c44e8e9e67e156d8b",
-  "branch": "chore/acquire-picomatch-vendor-20261117",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "35730e64ed6c8d94af912afb257df7702f4e1563",
+  "branch": "chore/retire-expired-claims-inv002-20261121",
+  "state": "MERGED",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
