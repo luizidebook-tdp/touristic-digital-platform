@@ -2,23 +2,6 @@
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
   "claims": {
-    "MD-D02-A01-RECONCILED-20261113": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "fix/d02-a01-reconciled-20261113",
-      "baseSha": "b8b20e72d959ebe7aa4bdee55a034f987d2d6b51",
-      "paths": [
-        "apps/morro-digital-platform/tooling/ticketing-operator-authorization.test.mjs",
-        "services/ticketing/src/commerce-public-http-transport.test.ts",
-        "services/ticketing/src/commerce-public-http-transport.ts",
-        "services/ticketing/src/public-http-transport.ts",
-        ".morro/changesets/MD-D02-A01-RECONCILED-20261113.json"
-      ],
-      "domains": ["ticketing"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-16T23:00:00.000Z"
-    },
     "MD-TASK-GENERATION-REPOSITORY-20261114": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
