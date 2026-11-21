@@ -2,22 +2,6 @@
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
   "claims": {
-    "MD-OCI-PUBLISHED-MEDIA-20261117": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "chore/acquire-published-media-image-20261117",
-      "baseSha": "1369aa8bcc189e324b86b4918c83c90eb41c0edc",
-      "paths": [
-        ".morro/changesets/MD-OCI-PUBLISHED-MEDIA-20261117.json",
-        "Dockerfile",
-        "tooling/quality/published-static-media.mjs",
-        "tooling/quality/published-static-media.test.mjs"
-      ],
-      "domains": ["ci-release"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-18T23:00:00.000Z"
-    },
     "MD-LEAFLET-CAMERA-CENSUS-20261117": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",

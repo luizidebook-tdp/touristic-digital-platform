@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-OCI-PUBLISHED-MEDIA-20261117",
   "objective": "include-only-verified-published-legacy-media-in-immutable-runtime-image",
-  "baseSha": "1369aa8bcc189e324b86b4918c83c90eb41c0edc",
-  "branch": "chore/acquire-published-media-image-20261117",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "f258a2ed8d9255088159179c3505d62e7724ef4d",
+  "branch": "chore/retire-inv002-07-oci-published-media",
+  "state": "MERGED",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
