@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-AUTH-WARNING-COMPATIBILITY-20261117",
   "objective": "preserve-native-proxy-diagnostics-and-strict-auth-exec-test-security-assertions",
-  "baseSha": "4a8831157ba9e35354bcde03f97bab8002d15ede",
-  "branch": "chore/auth-warning-claim-20261117",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "6d24df1c44f278e4bd2fac14c214459eee8172e6",
+  "branch": "chore/retire-expired-claims-inv002-20261121",
+  "state": "MERGED",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {

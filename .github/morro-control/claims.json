@@ -2,20 +2,6 @@
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
   "claims": {
-    "MD-AUTH-WARNING-COMPATIBILITY-20261117": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "chore/auth-warning-claim-20261117",
-      "baseSha": "4a8831157ba9e35354bcde03f97bab8002d15ede",
-      "paths": [
-        "tooling/workspace/github-auth-exec.test.mjs",
-        ".morro/changesets/MD-AUTH-WARNING-COMPATIBILITY-20261117.json"
-      ],
-      "domains": ["ci-release"],
-      "risk": "P1",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-18T07:30:00.000Z"
-    },
     "MD-OCI-PUBLISHED-MEDIA-20261117": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
