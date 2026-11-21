@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-TASK-GENERATION-REPOSITORY-20261114",
   "objective": "repair-task-generation-repository-identity-without-weakening-canonical-execution-or-owner-attestation",
-  "baseSha": "0289975287ba4680deeac5681119caf6a254db71",
-  "branch": "infra/acquire-task-generation-repository-20261114",
-  "state": "IMPLEMENTING",
+  "baseSha": "6157335e56e38fc9248871fb1c74f4162fe71c1d",
+  "branch": "chore/retire-inv002-03-task-generation",
+  "state": "MERGED",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
