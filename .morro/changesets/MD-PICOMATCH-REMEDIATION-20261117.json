@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-PICOMATCH-REMEDIATION-20261117",
   "objective": "remediate-picomatch-cve-2026-112366-with-transparent-vendored-fork-reproducible-source-provenance-and-unchanged-security-gates",
-  "baseSha": "d178754eecf431ba08b731e0351c90701454ebbb",
-  "branch": "chore/acquire-picomatch-remediation-20261117",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "4fc8c49f9daab2bcbe5a90dacff9a12dc4946ae2",
+  "branch": "chore/retire-expired-claims-inv002-20261121",
+  "state": "MERGED",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
