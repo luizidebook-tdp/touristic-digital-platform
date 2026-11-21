@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-CONTROL-CENTER-CATALOG-RUNTIME-20261115",
   "objective": "persist-and-retrieve-exact-public-catalog-capabilities-in-place-runtime-preserving-server-side-tenant-and-auth-boundaries",
-  "baseSha": "06987b331cade35d49c1ac291b3c3b97aeb0a514",
-  "branch": "fix/control-center-catalog-runtime-20261115",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "817edb2492b0dcdc369cb96956ff464cd7608aa5",
+  "branch": "chore/retire-expired-claims-inv002-20261121",
+  "state": "MERGED",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
