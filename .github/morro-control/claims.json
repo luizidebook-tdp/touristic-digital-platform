@@ -2,22 +2,6 @@
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
   "claims": {
-    "MD-MAP-HOME-SEARCH-PROOF-20261119": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "chore/map-home-search-proof-20261119",
-      "baseSha": "5a048d4e46bbd2339c2e20d1125773b76b82c8c7",
-      "paths": [
-        ".morro/changesets/MD-MAP-HOME-SEARCH-PROOF-20261119.json",
-        ".github/workflows/search-browser-contract.yml",
-        "tooling/ci/search-canonical-place-browser-contract.mjs",
-        "apps/morro-digital-platform/tooling/home-discover-manual-conformance.mjs"
-      ],
-      "domains": ["ci-release", "map"],
-      "risk": "P1",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-20T01:00:00.000Z"
-    },
     "MD-MAP-ACTIVE-SHEET-20261120": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
