@@ -2,24 +2,6 @@
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
   "claims": {
-    "MD-EXPLORE-DETAIL-PROOF-20261117": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "chore/acquire-explore-detail-proof-20261117",
-      "baseSha": "d1a352b9773506cccd5eb83c0c2903e66d6d0e44",
-      "paths": [
-        ".morro/changesets/MD-EXPLORE-DETAIL-PROOF-20261117.json",
-        ".github/workflows/assistant-input-menu-flow-v1-parity.yml",
-        ".github/workflows/assistant-place-actions-v1-parity.yml",
-        ".github/workflows/v1-explore-locations-browser-regression.yml",
-        "tooling/ci/explore-detail-browser-proof.mjs",
-        "tooling/ci/explore-detail-browser-proof.test.mjs"
-      ],
-      "domains": ["ci-release"],
-      "risk": "P1",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-19T23:00:00.000Z"
-    },
     "MD-PICOMATCH-REMEDIATION-20261117": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
