@@ -2,21 +2,6 @@
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
   "claims": {
-    "MD-CONTROL-CENTER-CATALOG-SUITE-20261115": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "fix/control-center-catalog-suite-20261115",
-      "baseSha": "467efeee27b5b02e211f998faf0b0d25b20a8ef7",
-      "paths": [
-        ".morro/changesets/MD-CONTROL-CENTER-CATALOG-SUITE-20261115.json",
-        "tooling/ci/scheduled-suites.json",
-        "tooling/ci/suite-scheduler.test.mjs"
-      ],
-      "domains": ["ci-release"],
-      "risk": "P1",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-16T23:00:00.000Z"
-    },
     "MD-AUTH-WARNING-COMPATIBILITY-20261117": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",

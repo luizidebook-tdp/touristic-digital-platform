@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-CONTROL-CENTER-CATALOG-SUITE-20261115",
   "objective": "route-three-business-catalog-paths-to-existing-control-center-catalog-drafts-proof-without-changing-workflows-or-reducing-required-evidence",
-  "baseSha": "467efeee27b5b02e211f998faf0b0d25b20a8ef7",
-  "branch": "fix/control-center-catalog-suite-20261115",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "323e05e5274103b05541b732dbc8de35ce9b4d05",
+  "branch": "chore/retire-expired-claims-inv002-20261121",
+  "state": "MERGED",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {
