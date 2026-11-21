@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-D02-A01-RECONCILED-20261113",
   "objective": "restore-server-authoritative-guest-quote-destination-isolation-and-preserve-method-session-csrf-origin-authorization",
-  "baseSha": "b8b20e72d959ebe7aa4bdee55a034f987d2d6b51",
-  "branch": "fix/d02-a01-reconciled-20261113",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "a802318971aee22f1124a3cf66472fdfce87b536",
+  "branch": "chore/retire-expired-claims-inv002-20261121",
+  "state": "MERGED",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
