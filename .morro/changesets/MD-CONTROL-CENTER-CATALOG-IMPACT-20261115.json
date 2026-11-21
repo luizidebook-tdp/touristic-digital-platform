@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-CONTROL-CENTER-CATALOG-IMPACT-20261115",
   "objective": "classify-three-exact-public-catalog-paths-in-existing-browser-and-destination-scoped-database-impact-domains-without-reducing-risk-or-required-proofs",
-  "baseSha": "0173ab404809e62eadcc20849263fdb7105aec81",
-  "branch": "fix/control-center-catalog-impact-20261115",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "76128871f34587e0556d60c88ba2d10121ff666a",
+  "branch": "chore/retire-inv002-05-control-center-catalog-impact",
+  "state": "MERGED",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {
