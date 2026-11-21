@@ -2,23 +2,6 @@
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
   "claims": {
-    "MD-PICOMATCH-REMEDIATION-20261117": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "chore/acquire-picomatch-remediation-20261117",
-      "baseSha": "d178754eecf431ba08b731e0351c90701454ebbb",
-      "paths": [
-        ".morro/changesets/MD-PICOMATCH-REMEDIATION-20261117.json",
-        "package.json",
-        "pnpm-lock.yaml",
-        "tooling/quality/picomatch-security-remediation.test.mjs",
-        "tooling/quality/vendor/picomatch/"
-      ],
-      "domains": ["ci-release"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-19T23:00:00.000Z"
-    },
     "MD-PICOMATCH-VENDOR-20261117": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
