@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-ASSISTANT-PROFILE-IMPACT-20261112",
   "objective": "admit-exact-local-assistant-profile-paths-to-existing-assistant-conversation-impact-domain-without-changing-risk-or-proof-requirements",
-  "baseSha": "1ce64d9ff214ca1d8c4baccca540286b141913f6",
-  "branch": "chore/assistant-profile-impact-20261112",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "98a8adcfa23d00bba3e162a57a6860a126925cf1",
+  "branch": "chore/retire-expired-claims-inv002-20261121",
+  "state": "MERGED",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {
