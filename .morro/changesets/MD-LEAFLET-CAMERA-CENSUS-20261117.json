@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-LEAFLET-CAMERA-CENSUS-20261117",
   "objective": "classify-only-reversible-leaflet-camera-binding-maintenance-without-allowing-partial-destination-activation",
-  "baseSha": "6dbfcb8946080660deb1d7ef4c9e7746666d05ac",
-  "branch": "chore/acquire-leaflet-camera-census-20261117",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "66aa0a51b74891730487b981c3f71c195e725f71",
+  "branch": "chore/retire-expired-claims-inv002-20261121",
+  "state": "MERGED",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {
