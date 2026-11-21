@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-MAP-ACTIVE-SHEET-20261120",
   "objective": "align-active-map-sheet-state-controls-and-context-recovery-with-approved-map-manual",
-  "baseSha": "ee414640416039def34d5db508e21df695eb8fe6",
-  "branch": "fix/map-active-sheet-manual-20261120",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "0da9d3d691dc9ebdf8c6bc16b637cd25a9440bc9",
+  "branch": "chore/retire-inv002-05-map-active-sheet",
+  "state": "MERGED",
   "risk": "high",
   "scope": "DESTINATION:MORRO",
   "owns": {
