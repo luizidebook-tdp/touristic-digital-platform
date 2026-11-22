@@ -12,10 +12,7 @@
         ".morro/ownership.json",
         "apps/morro-digital-platform/tooling/control-center-shell-v1-browser-contract.cjs"
       ],
-      "domains": [
-        "auth",
-        "ci-release"
-      ],
+      "domains": ["auth", "ci-release"],
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-22T20:30:00.000Z"
