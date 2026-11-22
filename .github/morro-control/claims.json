@@ -2,26 +2,6 @@
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
   "claims": {
-    "MD-STAGING-RELEASE-GOVERNANCE-20261120": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "chore/register-staging-release-claim-20261120",
-      "baseSha": "04e0184c6857f19334cfe0454d29dbb8edaeef4c",
-      "paths": [
-        ".morro/changesets/MD-STAGING-RELEASE-GOVERNANCE-20261120.json",
-        ".github/workflows/staging-oci-promotion.yml",
-        ".github/morro-control/release-state.json",
-        "docs/operations/RENDER-RELEASE-TARGET-GOVERNANCE.md",
-        "tooling/quality/release-target-governance.test.mjs",
-        "tooling/quality/render-staging-blueprint.test.mjs",
-        "tooling/ci/staging-oci-deployment-evidence.mjs",
-        "tooling/ci/staging-oci-deployment-evidence.test.mjs"
-      ],
-      "domains": ["ci-release"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-22T17:30:00.000Z"
-    },
     "MD-CC-SHELL-BROWSER-CONTRACT-20261120": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
@@ -32,7 +12,10 @@
         ".morro/ownership.json",
         "apps/morro-digital-platform/tooling/control-center-shell-v1-browser-contract.cjs"
       ],
-      "domains": ["auth", "ci-release"],
+      "domains": [
+        "auth",
+        "ci-release"
+      ],
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-22T20:30:00.000Z"
