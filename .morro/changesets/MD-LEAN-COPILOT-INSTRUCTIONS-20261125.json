@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-LEAN-COPILOT-INSTRUCTIONS-20261125",
+  "objective": "align-copilot-material-write-instructions-with-executable-ordinary-pr-policy",
+  "baseSha": "20582b1bed342d9164d04ffcadbd4b31981e6d6c",
+  "branch": "infra/lean-copilot-instructions-20261125",
+  "state": "IMPLEMENTING",
+  "risk": "high",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-LEAN-COPILOT-INSTRUCTIONS-20261125.json",
+      ".github/instructions/analytics.instructions.md",
+      ".github/instructions/assistant.instructions.md",
+      ".github/instructions/auth.instructions.md",
+      ".github/instructions/business.instructions.md",
+      ".github/instructions/control-center.instructions.md",
+      ".github/instructions/crm.instructions.md",
+      ".github/instructions/database.instructions.md",
+      ".github/instructions/notifications.instructions.md",
+      ".github/instructions/payments.instructions.md",
+      ".github/instructions/pwa.instructions.md",
+      ".github/instructions/render-release.instructions.md",
+      ".github/instructions/search-map.instructions.md",
+      ".github/instructions/security.instructions.md",
+      ".github/instructions/tenant.instructions.md",
+      ".github/instructions/ticketing.instructions.md"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": []
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": ["changeset", "git-identity", "ownership", "proof-plan"]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 300
+    },
+    "commands": [
+      {
+        "id": "lean-instructions-and-claim-regressions",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/fabric/ordinary-pr-policy.test.mjs",
+          "tooling/quality/agent-profile-contract-trusted.test.mjs",
+          ".github/hooks/morro-pretool-guard.test.mjs",
+          "tooling/control-state/mdctl-claim-lifecycle.test.mjs",
+          "tooling/fabric/claim-guard.test.mjs",
+          "tooling/control-state/mdctl-merge-gate.test.mjs"
+        ],
+        "timeoutSeconds": 300
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
