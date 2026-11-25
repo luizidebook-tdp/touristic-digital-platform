@@ -49,7 +49,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "infra/lean-mysql-security-20261125",
-      "baseSha": "d70bb633b8b141cc784c9a1622026e76d8f9092c",
+      "baseSha": "0562fd843f795ea2f2459b14d2df10f8059b861e",
       "paths": [
         ".morro/changesets/MD-LEAN-MYSQL-SECURITY-20261125.json",
         "tooling/render/mysql-staging/Dockerfile",
