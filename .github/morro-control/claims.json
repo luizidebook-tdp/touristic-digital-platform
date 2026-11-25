@@ -6,7 +6,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "infra/lean-runtime-pins-20261125",
-      "baseSha": "a2f0bcbedf0438c8566468e9d37f9c00a1dac31d",
+      "baseSha": "77474210a3f607f3a46e9dc5acfbb2927fad6af2",
       "paths": [
         ".morro/changesets/MD-LEAN-RUNTIME-PINS-20261125.json",
         "Dockerfile",
