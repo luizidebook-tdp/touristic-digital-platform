@@ -10,5 +10,5 @@ These instructions extend `AGENTS.md` for matching paths.
 - Admin actions require authorization, replay protection and audit evidence.
 - Financial aggregates are read models, not alternate monetary authority.
 - Universal search composes owners rather than cloning their data.
-- A material write requires an active ChangeSet claim covering the exact path.
+- A material write requires an active ChangeSet claim covering the exact path whenever the applicable executable policy requires one. Ordinary application changes explicitly eligible under `tooling/fabric/ordinary-pr-policy.mjs` do not require a ChangeSet, claim or lease, but remain subject to applicable tests, quality checks and review.
 - Evidence must name the exact source SHA and cannot be reused across non-equivalent trees.
