@@ -16,6 +16,34 @@
       "risk": "P0",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-22T20:30:00.000Z"
+    },
+    "MD-LEAN-COPILOT-INSTRUCTIONS-20261125": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "infra/lean-copilot-instructions-20261125",
+      "baseSha": "20582b1bed342d9164d04ffcadbd4b31981e6d6c",
+      "paths": [
+        ".morro/changesets/MD-LEAN-COPILOT-INSTRUCTIONS-20261125.json",
+        ".github/instructions/analytics.instructions.md",
+        ".github/instructions/assistant.instructions.md",
+        ".github/instructions/auth.instructions.md",
+        ".github/instructions/business.instructions.md",
+        ".github/instructions/control-center.instructions.md",
+        ".github/instructions/crm.instructions.md",
+        ".github/instructions/database.instructions.md",
+        ".github/instructions/notifications.instructions.md",
+        ".github/instructions/payments.instructions.md",
+        ".github/instructions/pwa.instructions.md",
+        ".github/instructions/render-release.instructions.md",
+        ".github/instructions/search-map.instructions.md",
+        ".github/instructions/security.instructions.md",
+        ".github/instructions/tenant.instructions.md",
+        ".github/instructions/ticketing.instructions.md"
+      ],
+      "domains": ["ci-release"],
+      "risk": "P1",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-26T15:00:00.000Z"
     }
   }
 }
