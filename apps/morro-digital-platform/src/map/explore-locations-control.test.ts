@@ -696,6 +696,51 @@ function canonicalDetail(placeId: string, description = "Full place details") {
   };
 }
 
+describe("canonical place action projection fails closed", () => {
+  it("hides inferred actions while the projection is pending and when it is absent", async () => {
+    let resolveDetail: (value: unknown) => void = () => {};
+    const pendingDetail = new Promise<unknown>((resolve) => {
+      resolveDetail = resolve;
+    });
+    const consumer = actualPlaceDetailConsumer("pt", () => pendingDetail);
+    const selection = consumer.select(canonicalLocation("place-a"));
+    const visibleValues = () =>
+      consumer.rails.at(-1)?.map(({ value }) => value);
+
+    expect(visibleValues()).toEqual(["__back_to_places__"]);
+    resolveDetail(null);
+    await selection;
+    expect(visibleValues()).toEqual(["__back_to_places__"]);
+  });
+
+  it("does not infer actions for a canonical source without a usable identity", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", () => null);
+    await consumer.select({
+      name: "Unidentified canonical place",
+      category: "beaches",
+      latitude: -13.38,
+      longitude: -38.91,
+      source: "canonical",
+    });
+
+    expect(consumer.rails.at(-1)?.map(({ value }) => value)).toEqual([
+      "__back_to_places__",
+    ]);
+  });
+
+  it("retains the legacy action fallback for non-canonical catalog locations", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", () => null);
+    const catalogPlace = morroV1SearchCatalog.find(
+      (item) => item.name === "Primeira Praia",
+    )!;
+    await consumer.select(catalogPlace);
+
+    expect(consumer.rails.at(-1)?.map(({ value }) => value)).toContain(
+      "como chegar",
+    );
+  });
+});
+
 describe("selected canonical place detail action", () => {
   it.each(["canonical", "catalog"] as const)(
     "restores the selected %s detail after inspecting a marker group",
@@ -869,12 +914,12 @@ describe("selected canonical place detail action", () => {
           value: "ver fotos",
         }),
       );
-      expect(consumer.rails[0]).toContainEqual(
+      expect(consumer.rails[0]).toEqual([
         expect.objectContaining({
-          label: `ℹ️ ${getV1ExploreLabel("learnMore", locale)}`,
-          value: "saiba mais",
+          label: `⬅️ ${getV1ExploreLabel("back", locale)}`,
+          value: "__back_to_places__",
         }),
-      );
+      ]);
       const before = consumer.snapshot();
       consumer.click("place-action:info:place-a");
       expect(consumer.messages.at(-1)?.description).toBe("Full place details");

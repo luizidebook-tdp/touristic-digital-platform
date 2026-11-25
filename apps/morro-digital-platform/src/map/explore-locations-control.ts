@@ -2599,12 +2599,12 @@ export function installExploreLocationsControl({
       exploreFlowBottomSheet?.hide();
     }
 
-    const safeFallbackActions = getV1ExplorePlaceActionOptions(
-      category,
-      locale,
-    ).filter(
-      ({ actionId }) => !UNREGISTERED_COMMERCIAL_ACTION_IDS.has(actionId),
-    );
+    const safeFallbackActions =
+      "source" in location && location.source === "canonical"
+        ? Object.freeze([])
+        : getV1ExplorePlaceActionOptions(category, locale).filter(
+            ({ actionId }) => !UNREGISTERED_COMMERCIAL_ACTION_IDS.has(actionId),
+          );
     const description =
       "description" in presentationLocation &&
       typeof presentationLocation.description === "string"
