@@ -44,6 +44,22 @@
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-26T15:00:00.000Z"
+    },
+    "MD-LEAN-MYSQL-SECURITY-20261125": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "infra/lean-mysql-security-20261125",
+      "baseSha": "d70bb633b8b141cc784c9a1622026e76d8f9092c",
+      "paths": [
+        ".morro/changesets/MD-LEAN-MYSQL-SECURITY-20261125.json",
+        "tooling/render/mysql-staging/Dockerfile",
+        "tooling/render/mysql-production/Dockerfile",
+        "tooling/render/mysql-production-dr/Dockerfile"
+      ],
+      "domains": ["ci-release"],
+      "risk": "P0",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-26T15:00:00.000Z"
     }
   }
 }
