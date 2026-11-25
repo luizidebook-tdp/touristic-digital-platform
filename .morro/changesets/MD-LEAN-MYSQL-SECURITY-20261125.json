@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-LEAN-MYSQL-SECURITY-20261125",
   "objective": "remediate-fixable-oracle-linux-vulnerabilities-in-canonical-mysql-images",
-  "baseSha": "0562fd843f795ea2f2459b14d2df10f8059b861e",
-  "branch": "infra/lean-mysql-security-20261125",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "bb8c63387f34e7b9345ea66469f366ec68abe0de",
+  "branch": "infra/retire-lean-mysql-20261125",
+  "state": "MERGED",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
