@@ -19,7 +19,7 @@ import { pathToFileURL } from "node:url";
 import { deflateSync, gunzipSync, gzipSync, inflateSync } from "node:zlib";
 
 // Captured signed Alpine v3.22 main/x86_64 APKINDEX, SHA256
-// 4dabf38dc88ea7c50b2c12e933ce4d6079859ef5009d6b71e8a6fb6da599c573.
+// 03359e1a4ab25c6e9f588cf1c6250ee9878a8f4e6cb96ba8325b2b90722aa4ac.
 // Values are [version, signed-index control checksum]. apk remains responsible
 // for signature verification. Copy real installer records without rewriting them.
 export const runtimePackages = Object.freeze({
@@ -32,9 +32,9 @@ export const runtimePackages = Object.freeze({
   "ca-certificates-bundle": ["20261020-r0", "Q1S0j4S2Jt6I+Ch50QIEvbuYBnpXs="],
   "icu-data-full": ["76.1-r1", "Q1SLq9KZUiyAqjYrd3+rpvzuA3iok="],
   "icu-libs": ["76.1-r1", "Q1ZqvKCUl2G2eHYg0U1RgeKu7Tdoc="],
-  libcrypto3: ["3.5.9-r0", "Q1oh3VN2UxBgaVmtvnt5CjXfB97sk="],
+  libcrypto3: ["3.5.9-r2", "Q1GAkGX1sO/LpWkvXNhr7Cs7hwqfw="],
   libgcc: ["14.2.0-r6", "Q1aUWRHcKxNIXpdGDZ3ycWrRoKoy0="],
-  libssl3: ["3.5.9-r0", "Q1vg55k+/1wPY5bIUvUA2ERnX9nTc="],
+  libssl3: ["3.5.9-r2", "Q13Eb3+gMcVi5n1/2E4U7e80V5JGQ="],
   "libstdc++": ["14.2.0-r6", "Q17fXKwemP/k+zYJ9I3tg7Nb7BTJ0="],
   musl: ["1.2.5-r13", "Q1Kd1D3m57UuRVKkGgKHd5yKqNj0s="],
   "nghttp2-libs": ["1.69.0-r0", "Q1fwuEkacafZMCRajgY76tWWnN+tk="],
@@ -44,7 +44,7 @@ export const runtimePackages = Object.freeze({
   "sqlite-libs": ["3.49.2-r1", "Q1yzGtJ1KT/55wX0HRyGJudxpYnkU="],
   tzdata: ["2026f-r0", "Q1HExDU9K4MpYGTrOCH5ilOhHPt7A="],
   zlib: ["1.4-r0", "Q1EHjMEsJcFTsyYtFfIcswNU8ZoRA="],
-  "zstd-libs": ["1.5.7-r0", "Q1UMgxErVhn0jTbWkZCky3xx8Vx9I="],
+  "zstd-libs": ["1.6.0-r1", "Q1CQ2ATWUH0YBxMat7Lj56FvF4buc="],
 });
 
 const installedPath = "lib/apk/db/installed";

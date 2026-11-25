@@ -11,9 +11,9 @@ RUN apk add --no-cache \
     ca-certificates-bundle=20261020-r0 \
     icu-data-full=76.1-r1 \
     icu-libs=76.1-r1 \
-    libcrypto3=3.5.9-r0 \
+    libcrypto3=3.5.9-r2 \
     libgcc=14.2.0-r6 \
-    libssl3=3.5.9-r0 \
+    libssl3=3.5.9-r2 \
     libstdc++=14.2.0-r6 \
     musl=1.2.5-r13 \
     nghttp2-libs=1.69.0-r0 \
@@ -23,7 +23,7 @@ RUN apk add --no-cache \
     sqlite-libs=3.49.2-r1 \
     tzdata=2026f-r0 \
     zlib=1.4-r0 \
-    zstd-libs=1.5.7-r0
+    zstd-libs=1.6.0-r1
 
 # Retain complete selected package payloads and their genuine installed records.
 # Installer utilities remain in this build stage, outside the final runtime.

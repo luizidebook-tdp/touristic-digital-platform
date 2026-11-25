@@ -62,11 +62,11 @@ for (const [label, from, to] of [
   ],
   ["old zlib package", "zlib=1.4-r0", "zlib=1.3.2-r0"],
   ["different Node package", "nodejs=22.23.5-r0", "nodejs=22.23.3-r0"],
-  ["unpinned dependency", "zstd-libs=1.5.7-r0", "zstd-libs"],
+  ["unpinned dependency", "zstd-libs=1.6.0-r1", "zstd-libs"],
   [
     "installer shell injection",
-    "zstd-libs=1.5.7-r0",
-    "zstd-libs=1.5.7-r0 && echo altered",
+    "zstd-libs=1.6.0-r1",
+    "zstd-libs=1.6.0-r1 && echo altered",
   ],
   [
     "different application ABI",

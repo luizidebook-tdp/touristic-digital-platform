@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-LEAN-RUNTIME-PINS-20261125",
   "objective": "restore-available-alpine-runtime-pins-and-exact-composition-proof",
-  "baseSha": "a2f0bcbedf0438c8566468e9d37f9c00a1dac31d",
+  "baseSha": "77474210a3f607f3a46e9dc5acfbb2927fad6af2",
   "branch": "infra/lean-runtime-pins-20261125",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
