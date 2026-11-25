@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-CC-SHELL-BROWSER-CONTRACT-20261120",
   "objective": "register-control-center-shell-browser-contract-under-auth-ownership-and-verify-five-manual-roots",
-  "baseSha": "a5c957460e0ec440275c6523c96032636b073955",
-  "branch": "chore/register-control-center-browser-contract-claim-20261120",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "af2d45e6ff4e0f023f56fa3df7790845a38e931c",
+  "branch": "infra/retire-cc-browser-contract-20261125",
+  "state": "MERGED",
   "risk": "critical",
   "scope": "PLATFORM",
   "owns": {
