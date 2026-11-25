@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-LEAN-MYSQL-SECURITY-20261125",
+  "objective": "remediate-fixable-oracle-linux-vulnerabilities-in-canonical-mysql-images",
+  "baseSha": "d70bb633b8b141cc784c9a1622026e76d8f9092c",
+  "branch": "infra/lean-mysql-security-20261125",
+  "state": "IMPLEMENTING",
+  "risk": "critical",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-LEAN-MYSQL-SECURITY-20261125.json",
+      "tooling/render/mysql-staging/Dockerfile",
+      "tooling/render/mysql-production/Dockerfile",
+      "tooling/render/mysql-production-dr/Dockerfile"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": []
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "full-quality",
+    "domain-invariants",
+    "integration",
+    "exact-head-release-gates",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": ["changeset", "git-identity", "ownership", "proof-plan"]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 300
+    },
+    "commands": [
+      {
+        "id": "mysql-image-security-and-compatibility-contracts",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/quality/mysql-gosu-go-builder-contract.test.mjs",
+          "tooling/quality/render-production-mysql-blueprint.test.mjs",
+          "tooling/quality/render-staging-blueprint.test.mjs"
+        ],
+        "timeoutSeconds": 300
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
