@@ -21,7 +21,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "infra/lean-copilot-instructions-20261125",
-      "baseSha": "20582b1bed342d9164d04ffcadbd4b31981e6d6c",
+      "baseSha": "0717211e408fa7fa3ba2c69b0b9f1c5c72aea2ff",
       "paths": [
         ".morro/changesets/MD-LEAN-COPILOT-INSTRUCTIONS-20261125.json",
         ".github/instructions/analytics.instructions.md",

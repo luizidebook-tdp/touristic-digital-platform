@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-LEAN-COPILOT-INSTRUCTIONS-20261125",
   "objective": "align-copilot-material-write-instructions-with-executable-ordinary-pr-policy",
-  "baseSha": "20582b1bed342d9164d04ffcadbd4b31981e6d6c",
+  "baseSha": "0717211e408fa7fa3ba2c69b0b9f1c5c72aea2ff",
   "branch": "infra/lean-copilot-instructions-20261125",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {
