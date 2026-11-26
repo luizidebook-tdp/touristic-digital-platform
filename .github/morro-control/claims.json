@@ -1,22 +1,5 @@
 {
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
-  "claims": {
-    "MD-LEAN-RUNTIME-PINS-20261125": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "infra/lean-runtime-pins-20261125",
-      "baseSha": "77474210a3f607f3a46e9dc5acfbb2927fad6af2",
-      "paths": [
-        ".morro/changesets/MD-LEAN-RUNTIME-PINS-20261125.json",
-        "Dockerfile",
-        "tooling/quality/runtime-image-composition.mjs",
-        "tooling/quality/release-container-entrypoint.test.mjs"
-      ],
-      "domains": ["ci-release"],
-      "risk": "P0",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-26T15:00:00.000Z"
-    }
-  }
+  "claims": {}
 }
