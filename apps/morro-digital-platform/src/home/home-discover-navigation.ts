@@ -1,6 +1,7 @@
 import { createFeatureStyleGate } from "../map/feature-styles.js";
 import {
   createManualPlaceSearch,
+  manualSearchResultLabel,
   type ManualSearchSnapshot,
 } from "./manual-place-search.js";
 import { getMorroDigitalApplication } from "../main.js";
@@ -130,6 +131,7 @@ const MANUAL_COPY = {
     "Itinerários e percursos salvos ainda não estão disponíveis nesta tela.",
     "Anterior",
     "Próxima",
+    "Resultados do mapa",
   ],
   en: [
     "Find places",
@@ -151,6 +153,7 @@ const MANUAL_COPY = {
     "Saved itineraries and routes are not available here yet.",
     "Previous",
     "Next",
+    "Map results",
   ],
   es: [
     "Buscar lugares",
@@ -172,6 +175,7 @@ const MANUAL_COPY = {
     "Los itinerarios y recorridos guardados aún no están disponibles aquí.",
     "Anterior",
     "Siguiente",
+    "Resultados del mapa",
   ],
   he: [
     "חיפוש מקומות",
@@ -193,6 +197,7 @@ const MANUAL_COPY = {
     "מסלולים שמורים עדיין אינם זמינים כאן.",
     "הקודם",
     "הבא",
+    "תוצאות מהמפה",
   ],
 } as const;
 
@@ -449,7 +454,7 @@ export function installHomeDiscoverNavigation({
       category?: string;
       placeId?: string;
       destinationId?: string;
-    }): void => {
+    }): HTMLButtonElement => {
       const row = document.createElement("li");
       const button = document.createElement("button");
       button.type = "button";
@@ -461,6 +466,7 @@ export function installHomeDiscoverNavigation({
       };
       row.append(button);
       list.append(row);
+      return button;
     };
     if (action === "saved") {
       try {
@@ -533,6 +539,7 @@ export function installHomeDiscoverNavigation({
     pager.hidden = true;
     manualPanel.append(pager);
     const refreshCommonLocale = refreshManualLocale;
+    let refreshResultLabels: (() => void) | undefined;
     // Keep the live draft DOM and in-flight request separate from submitted results.
     // Locale changes relabel only: no re-open, abort, map redraw or submit.
     refreshManualLocale = () => {
@@ -546,6 +553,7 @@ export function installHomeDiscoverNavigation({
       submit.textContent = copy[6];
       previous.textContent = copy[17];
       next.textContent = copy[18];
+      refreshResultLabels?.();
     };
     let pageGeneration = 0;
     const renderPage = async (
@@ -586,9 +594,19 @@ export function installHomeDiscoverNavigation({
         return;
       showStatus(
         () =>
-          `${state.snapshot.source === "local" ? copy[10] : copy[9]} · ${displayed.length ? start + 1 : 0}–${start + displayed.length} / ${valid.length}${displayed.length ? "" : ` · ${copy[11]}`}${ready ? "" : ` · ${copy[14]}`}`,
+          `${copy[{ canonical: 9, local: 10, map: 19 }[state.snapshot.source]]} · ${displayed.length ? start + 1 : 0}–${start + displayed.length} / ${valid.length}${displayed.length ? "" : ` · ${copy[11]}`}${ready ? "" : ` · ${copy[14]}`}`,
       );
-      displayed.forEach(addRow);
+      const rows = displayed.map((place) => ({ place, button: addRow(place) }));
+      refreshResultLabels = () => {
+        for (const { place, button } of rows) {
+          button.textContent = manualSearchResultLabel(
+            place,
+            valid,
+            document.documentElement.lang,
+          );
+        }
+      };
+      refreshResultLabels();
       pager.hidden = valid.length <= 20;
       previous.disabled = state.page === 0;
       next.disabled = state.page === lastPage;
@@ -613,6 +631,7 @@ export function installHomeDiscoverNavigation({
       const selectedCategory = category.value;
       manualSearchState = undefined;
       showStatus(() => copy[8]);
+      refreshResultLabels = undefined;
       list.replaceChildren();
       pager.hidden = true;
       void searchPlaces(query, selectedCategory, abort.signal)
