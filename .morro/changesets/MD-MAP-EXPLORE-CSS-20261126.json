@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-MAP-EXPLORE-CSS-20261126",
+  "objective": "authorize-explore-locations-css-contract-and-entry-manifest-corrections",
+  "baseSha": "a7aa082767453ad653a4bed196a91dd230739ca2",
+  "branch": "infra/acquire-map-explore-css-20261126",
+  "state": "IMPLEMENTING",
+  "risk": "high",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-MAP-EXPLORE-CSS-20261126.json",
+      "apps/morro-digital-platform/public/explore-locations.css",
+      "apps/morro-digital-platform/src/ux/place-search-explore-v2-contract.test.ts",
+      "tooling/ci/entry-css-manifest.json"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": []
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": ["changeset", "git-identity", "ownership", "proof-plan"]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 300
+    },
+    "commands": [
+      {
+        "id": "entry-css-build-contract",
+        "argv": ["node", "--test", "tooling/ci/build-entry-css.test.mjs"],
+        "timeoutSeconds": 300
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
