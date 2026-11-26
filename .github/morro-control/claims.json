@@ -1,5 +1,22 @@
 {
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
-  "claims": {}
+  "claims": {
+    "MD-MAP-EXPLORE-CSS-20261126": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "infra/acquire-map-explore-css-20261126",
+      "baseSha": "a7aa082767453ad653a4bed196a91dd230739ca2",
+      "paths": [
+        ".morro/changesets/MD-MAP-EXPLORE-CSS-20261126.json",
+        "apps/morro-digital-platform/public/explore-locations.css",
+        "apps/morro-digital-platform/src/ux/place-search-explore-v2-contract.test.ts",
+        "tooling/ci/entry-css-manifest.json"
+      ],
+      "domains": ["map", "ci-release"],
+      "risk": "P1",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-27T22:21:25.641Z"
+    }
+  }
 }
