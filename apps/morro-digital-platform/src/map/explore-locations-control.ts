@@ -1555,6 +1555,7 @@ export function installExploreLocationsControl({
       : category === undefined || ["places", "search"].includes(category)
         ? Object.freeze([])
         : Object.freeze([{ kind: "category" as const, value: category }]),
+    publishContext = true,
   ): Promise<void> => {
     const focusedMarker =
       document.activeElement instanceof HTMLElement &&
@@ -1629,7 +1630,7 @@ export function installExploreLocationsControl({
     if (!geospatialEngine?.initialized) {
       updateMapState(renderedMarkers.length, category, "error");
       showMapFailure(retryDatasetRender);
-      emitStateChange();
+      if (publishContext) emitStateChange();
       return;
     }
 
@@ -1704,7 +1705,7 @@ export function installExploreLocationsControl({
       )
         frameLocationsOnMap(document, [selected], geospatialEngine);
       setSheetStatus(locations.length === 0 ? "empty" : "ready");
-      if (!cameraOnly) emitStateChange();
+      if (!cameraOnly && publishContext) emitStateChange();
     } catch (error) {
       if (
         externalTourOwnsMap ||
@@ -1724,7 +1725,7 @@ export function installExploreLocationsControl({
         // Preserve the first provider failure for diagnostics.
       }
       showMapFailure(retryDatasetRender);
-      emitStateChange();
+      if (publishContext) emitStateChange();
       setExploreRuntimeStatus({ kind: "map-error", error });
     }
   };
@@ -2581,9 +2582,6 @@ export function installExploreLocationsControl({
       currentCategories().find((candidate) => candidate.value === category)
         ?.label ?? category;
     const conversation = getAssistantConversationOrchestrator(document);
-    const localSelectionSequence = canonicalPlaceId
-      ? undefined
-      : conversation.issueSequence();
     const previousTurn = conversation.recentTurns().at(-1);
     const refreshDetails =
       refreshingLocale &&
@@ -2637,6 +2635,64 @@ export function installExploreLocationsControl({
     );
     if (!refreshingLocale) firstPlaceAction?.focus();
 
+    const publishSelection = (): void => {
+      const mapFailed =
+        Boolean(canonicalPlaceId) &&
+        document.getElementById("map")?.dataset.exploreState === "error";
+      if (mapFailed) {
+        setExploreRuntimeStatus({
+          kind: "map-error",
+          error: new Error(getV1ExploreUiCopy(locale).mapUnknown),
+        });
+      } else {
+        setExploreRuntimeStatus({
+          kind: "selected",
+          place: presentationLocation.name,
+        });
+      }
+      emitStateChange();
+    };
+
+    const presentLocalDetail = (): void => {
+      const message = document.getElementById(ASSISTANT_FLOW_MESSAGE_ID);
+      if (!message) return;
+      // A locale update may refresh this detail or its pending selection,
+      // but must not replace an explicit answer already presented.
+      if (
+        refreshingLocale &&
+        message.dataset.conversationTurnId &&
+        message.dataset.conversationCause !== "place_selected"
+      )
+        return;
+      publishSelection();
+      const sequence = conversation.issueSequence();
+      placeDetailStyles.run(() => {
+        if (
+          destroyed ||
+          generation !== interactionGeneration ||
+          activeStage !== "detail" ||
+          activePlaceLocation !== presentationLocation ||
+          locale !== currentLocale() ||
+          !conversation.isCurrentSequence(sequence) ||
+          document.getElementById(ASSISTANT_FLOW_MESSAGE_ID) !== message ||
+          document
+            .getElementById("assistant-messages")
+            ?.getAttribute("aria-hidden") === "true"
+        )
+          return;
+        renderPlaceDetailMessage(
+          presentationLocation,
+          categoryLabel,
+          description,
+          undefined,
+          { media: null },
+        );
+      });
+    };
+
+    // Local data can be presented before map work; only later user intent cancels it.
+    if (!canonicalPlaceId) presentLocalDetail();
+
     const browserFetch = document.defaultView?.fetch?.bind(
       document.defaultView,
     );
@@ -2654,6 +2710,7 @@ export function installExploreLocationsControl({
         false,
         visibleLocations.length > 0,
         datasetCriteria,
+        Boolean(canonicalPlaceId),
       );
     }
 
@@ -2759,68 +2816,9 @@ export function installExploreLocationsControl({
       }
     }
 
-    const publishSelection = (): void => {
-      const mapFailed =
-        document.getElementById("map")?.dataset.exploreState === "error";
-      if (mapFailed) {
-        setExploreRuntimeStatus({
-          kind: "map-error",
-          error: new Error(getV1ExploreUiCopy(locale).mapUnknown),
-        });
-      } else {
-        setExploreRuntimeStatus({
-          kind: "selected",
-          place: presentationLocation.name,
-        });
-      }
-      emitStateChange();
-    };
-
-    const presentLocalDetail = (): void => {
-      const message = document.getElementById(ASSISTANT_FLOW_MESSAGE_ID);
-      if (!message) return;
-      // A locale update may refresh this detail or its pending selection,
-      // but must not replace an explicit answer already presented.
-      if (
-        refreshingLocale &&
-        message.dataset.conversationTurnId &&
-        message.dataset.conversationCause !== "place_selected"
-      )
-        return;
-      const sequence = localSelectionSequence;
-      if (sequence === undefined || !conversation.isCurrentSequence(sequence))
-        return;
-      placeDetailStyles.run(() => {
-        if (
-          destroyed ||
-          generation !== interactionGeneration ||
-          activeStage !== "detail" ||
-          activePlaceLocation !== presentationLocation ||
-          locale !== currentLocale() ||
-          !conversation.isCurrentSequence(sequence) ||
-          document.getElementById(ASSISTANT_FLOW_MESSAGE_ID) !== message ||
-          document
-            .getElementById("assistant-messages")
-            ?.getAttribute("aria-hidden") === "true"
-        )
-          return;
-        renderPlaceDetailMessage(
-          presentationLocation,
-          categoryLabel,
-          description,
-          undefined,
-          { media: null },
-        );
-        if (!refreshingLocale) publishSelection();
-      });
-    };
-
     // Locale refresh changes presentation, not the selected place or map.
     // Keep the confirmed description until a current translation is available.
-    if (refreshingLocale) {
-      if (!canonicalPlaceId) presentLocalDetail();
-      return;
-    }
+    if (refreshingLocale) return;
 
     if (
       generation !== interactionGeneration ||
@@ -2832,7 +2830,6 @@ export function installExploreLocationsControl({
     }
 
     if (canonicalPlaceId) publishSelection();
-    else presentLocalDetail();
   };
 
   const renderPlaces = (

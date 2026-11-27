@@ -15,6 +15,16 @@ import {
   getAssistantConversationOrchestrator,
   type AssistantConversationOrchestrator,
 } from "../assistant/assistant-conversation-orchestrator.js";
+import {
+  normalizeAssistantContextualLanguage,
+  resolveAssistantContextualCategoryLabel,
+  resolveAssistantContextualCopy,
+  resolveExploreContextualState,
+  resolveExploreLocationCount,
+} from "../assistant/assistant-contextual-state.js";
+import { composeConversationResponse } from "../assistant/assistant-conversation-response-composer.js";
+import { composeConversationVoice } from "../assistant/assistant-conversation-voice-composer.js";
+import { evaluateConversationPolicy } from "../assistant/assistant-conversation-policy.js";
 import { morroV1SearchCatalog, normalizeSearchText } from "@touristic/search";
 import {
   executeAssistantV1ResidualCommand,
@@ -429,6 +439,9 @@ interface PlaceDetailConsumer {
   select(location: ExploreMapLocation): Promise<void>;
   changeLocale(locale: string): void;
   execute(command: ExploreLocationsCommand): Promise<boolean>;
+  setMapInitialized(value: boolean): void;
+  failMarkers(): void;
+  mapFailureCount(): number;
   holdMarkers(): () => void;
   holdPosition(): () => void;
   listenerCount(type: string): number;
@@ -471,6 +484,7 @@ function actualPlaceDetailConsumer(
   locale: "pt" | "en" | "es" | "he",
   getDetail: (placeId: string, options: { locale: string }) => unknown,
   styleReady?: Promise<void>,
+  contextualEvents = false,
 ): PlaceDetailConsumer {
   const sourcePath = new URL("./explore-locations-control.ts", import.meta.url);
   const ast = ts.createSourceFile(
@@ -480,6 +494,7 @@ function actualPlaceDetailConsumer(
   );
   const names = new Set([
     "CANONICAL_MAP_DESTINATION_ID",
+    "emitStateChange",
     "stateSnapshot",
     "renderPlaceDetailMessage",
     "readActivePlaceDetail",
@@ -507,7 +522,9 @@ function actualPlaceDetailConsumer(
   const functions: string[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isVariableDeclaration(node) && names.has(node.name.getText(ast))) {
-      declarations.push(`const ${node.getText(ast)};`);
+      declarations.push(
+        `const ${node.getText(ast).replace(/^emitStateChange/u, "publishExploreState")};`,
+      );
     }
     if (
       ts.isFunctionDeclaration(node) &&
@@ -524,11 +541,34 @@ function actualPlaceDetailConsumer(
       "Expected the actual place detail consumers and locale observer",
     );
 
+  let contextualConsumer = "";
+  if (contextualEvents) {
+    const runtime = ts.createSourceFile(
+      "browser-assistant-runtime.ts",
+      readFileSync(
+        new URL("../assistant/browser-assistant-runtime.ts", import.meta.url),
+        "utf8",
+      ),
+      ts.ScriptTarget.Latest,
+    );
+    const visitRuntime = (node: ts.Node): void => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        node.name.getText(runtime) === "syncExploreContextualMessage"
+      )
+        contextualConsumer = `const ${node.getText(runtime)};`;
+      ts.forEachChild(node, visitRuntime);
+    };
+    visitRuntime(runtime);
+    if (!contextualConsumer)
+      throw new Error("Actual contextual consumer missing");
+  }
+
   // Run the production consumers together. Only browser/network boundaries
   // are fixtures; the ID, generation, copy and dispatch decisions are real.
   const javascript = ts.transpileModule(
     `
-      const {createExploreCameraReturn,createPlaceDetailMedia,isExploreLocationVisible,styleReady,publicPlaceCatalogText,locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator}=dependencies;
+      const {createExploreCameraReturn,createPlaceDetailMedia,isExploreLocationVisible,styleReady,publicPlaceCatalogText,locale,getDetail,normalizeSearchText,normalizeAssistantVoiceLanguage,getExploreLocationsCategories,getExploreLocationsForCategory,getAssistantCategoryButtonId,createExploreLocationDetailsCommand,resolveExploreLocationByName,getV1ExploreSubcategoryOptions,resolveV1ExploreAppliedResult,morroV1SearchCatalog,getV1ExploreLabel,getV1ExploreUiCopy,getV1ExplorePlaceActionOptions,getAssistantConversationOrchestrator,contextualEvents,normalizeAssistantContextualLanguage,resolveAssistantContextualCategoryLabel,resolveAssistantContextualCopy,resolveExploreContextualState,resolveExploreLocationCount,composeConversationResponse,composeConversationVoice,evaluateConversationPolicy}=dependencies;
       let styleGeneration=0;
       const placeDetailStyles={cancel(){styleGeneration++;},run(action){const generation=++styleGeneration;if(styleReady)void styleReady.then(()=>{if(generation===styleGeneration)action()}).catch(()=>{});else action();}};
       let activePlace,activePlaceLocation,activePlaceDetail,activeCategory,activeStage="menu",interactionGeneration=0;
@@ -553,6 +593,7 @@ function actualPlaceDetailConsumer(
             messages.push({name:nodes[0]?.textContent??"",description:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.textContent??"",lineBreaks:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.children.filter(n=>n.tagName==="br").length??0});
           }
         }
+        querySelector(selector){return selector===":scope > .md-assistant-contextual-copy"?this.children.find(node=>node.className==="md-assistant-contextual-copy")??null:null;}
         addEventListener(){}
         remove(){if(elements.get(this.id)===this)elements.delete(this.id);if(this.parentNode)this.parentNode.children=this.parentNode.children.filter(node=>node!==this);this.isConnected=false;}
         replaceWith(node){const parent=this.parentNode;if(parent){parent.children=parent.children.map(child=>child===this?node:child);node.parentNode=parent;node.isConnected=true;}this.isConnected=false;if(node.id)elements.set(node.id,node);}
@@ -601,12 +642,16 @@ function actualPlaceDetailConsumer(
       const discoveryClusterLabel=(count)=>String(count)+" places";
       // Keep other menu boundaries thin; model the group source consumed by the single-message controller.
       const renderFlow=(text)=>{let message=elements.get(ASSISTANT_FLOW_MESSAGE_ID);if(!message){message=new HTMLElement();message.id=ASSISTANT_FLOW_MESSAGE_ID;area.appendChild(message);}message.dataset.messageType="category-flow";message.children=[];message.textContent=text;if(activeMarkerMembers){elements.get(ASSISTANT_FLOW_RESULTS_ID)?.remove();const results=new HTMLElement();results.id=ASSISTANT_FLOW_RESULTS_ID;results.setAttribute("aria-label",text);area.appendChild(results);}return null;};
-      const setExploreRuntimeStatus=()=>{},emitStateChange=()=>{};
+      let mapFailures=0;const showMapFailure=()=>{mapFailures++;};
+      const setExploreRuntimeStatus=()=>{},emitStateChange=()=>{if(contextualEvents)publishExploreState();};
       const shareActivePlace=()=>{events.push({type:"share-observed",detail:{}});},tourTicketingUrl=()=>null,startImmersiveTour=()=>{},loadHybridGlobalMarkers=()=>{};
       const refreshCategoryPresentation=()=>{},restoreCategoryRail=()=>{},renderExploreRuntimeStatus=()=>{};
       const exploreRuntimeStatusDescriptor=null,immersiveTourController=null;
       ${functions.join("\n")}
       ${declarations.join("\n")}
+      const options={document},conversation=getAssistantConversationOrchestrator(document),readExploreState=stateSnapshot;
+      ${contextualConsumer}
+      if(contextualEvents)document.addEventListener("morro:explore-state-changed",()=>syncExploreContextualMessage());
       return {document,execute,select:selectLocation,click:handlePlaceAction,readState:stateSnapshot,setFavorites:(value)=>{storedFavorites=value;},refreshSaved:()=>refreshSavedPlaceActions(),rails,messages,events,
         search:locations=>renderSearchPlaces(locations,"Resultados","query"),back:returnFromPlaceDetail,
         openMembers:locations=>{openMarkerMembers(locations);const restore=closeMarkerList;return ()=>restore?.();},
@@ -616,6 +661,7 @@ function actualPlaceDetailConsumer(
         getFramingCalls:()=>framingCalls,
         setLocations:locations=>{visibleLocations=locations;datasetCategory="search";},getLocations:()=>visibleLocations,getRenderedLocations:()=>renderedLocations,getFramedLocations:()=>framedLocations,getSelectedMarkerIds:()=>mapMarkerElements.filter(el=>el.dataset.selected==="true").map(el=>el.dataset.markerId),
         listenerCount:type=>listeners.get(type)?.size??0,
+        setMapInitialized:value=>{geospatialEngine.initialized=value;},failMarkers:()=>{markerProviderReady=Promise.reject(new Error("provider unavailable"));},mapFailureCount:()=>mapFailures,
         holdMarkers:()=>{let release;markerProviderReady=new Promise(resolve=>{release=resolve;});return ()=>{markerProviderReady=Promise.resolve();release();};},
         holdPosition:()=>{holdPosition=true;return ()=>{holdPosition=false;resolvePosition?.({coords:{latitude:-13.38,longitude:-38.91}});};},
         changeLocale:locale=>{document.documentElement.lang=locale;localeObserver.callback([{attributeName:"lang"}]);},
@@ -633,6 +679,15 @@ function actualPlaceDetailConsumer(
     createExploreCameraReturn,
     isExploreLocationVisible,
     styleReady,
+    contextualEvents,
+    normalizeAssistantContextualLanguage,
+    resolveAssistantContextualCategoryLabel,
+    resolveAssistantContextualCopy,
+    resolveExploreContextualState,
+    resolveExploreLocationCount,
+    composeConversationResponse,
+    composeConversationVoice,
+    evaluateConversationPolicy,
     createPlaceDetailMedia,
     publicPlaceCatalogText,
     locale,
@@ -2800,10 +2855,26 @@ describe("local place selection presents its available detail directly", () => {
     },
   );
 
-  it.each(["action", "conversation"] as const)(
-    "does not recover local presentation authority after a newer %s while markers load",
-    async (change) => {
-      const consumer = actualPlaceDetailConsumer("pt", unexpectedDetail);
+  it.each([
+    ["action", false],
+    ["action", true],
+    ["conversation", false],
+    ["conversation", true],
+  ] as const)(
+    "does not recover local presentation authority after a newer %s while markers load (deferred CSS=%s)",
+    async (change, deferred) => {
+      let ready!: () => void;
+      const styles = deferred
+        ? new Promise<void>((resolve) => {
+            ready = resolve;
+          })
+        : undefined;
+      const consumer = actualPlaceDetailConsumer(
+        "pt",
+        unexpectedDetail,
+        styles,
+        true,
+      );
       const releaseMarkers = consumer.holdMarkers();
       const selection = consumer.select(local());
       await settleDetailRefresh();
@@ -2811,15 +2882,100 @@ describe("local place selection presents its available detail directly", () => {
       let newerSequence: number | undefined;
       if (change === "action") consumer.click("como chegar");
       else newerSequence = consumer.conversation.issueSequence();
+      // A ready stylesheet may already show the detail before the map.
+      // The old map must not replace the newer answer, with either timing.
+      consumer.setPresenterData({
+        conversationTurnId: "newer-answer",
+        conversationCause: "assistant_response",
+      });
+      const presentations = consumer.messages.length;
       releaseMarkers();
       await selection;
-      expect(consumer.media()).toBeUndefined();
+      if (styles) {
+        ready();
+        await settleDetailRefresh();
+      }
+      expect(consumer.messages).toHaveLength(presentations);
+      expect(consumer.presenter().conversationTurnId).toBe("newer-answer");
       if (newerSequence !== undefined)
         expect(consumer.conversation.isCurrentSequence(newerSequence)).toBe(
           true,
         );
     },
   );
+
+  it.each([
+    ["uninitialized", false],
+    ["uninitialized", true],
+    ["provider-error", false],
+    ["provider-error", true],
+  ] as const)(
+    "keeps local detail available with real contextual events: %s, deferred CSS=%s",
+    async (failure, deferred) => {
+      let ready!: () => void;
+      const styles = deferred
+        ? new Promise<void>((resolve) => {
+            ready = resolve;
+          })
+        : undefined;
+      const consumer = actualPlaceDetailConsumer(
+        "pt",
+        unexpectedDetail,
+        styles,
+        true,
+      );
+      if (failure === "uninitialized") consumer.setMapInitialized(false);
+      else consumer.failMarkers();
+      await consumer.select(local());
+      expect(consumer.mapFailureCount()).toBeGreaterThan(0);
+      expect(
+        consumer.document
+          .getElementById("map")
+          ?.getAttribute("data-explore-state"),
+      ).toBe("error");
+      if (styles) {
+        ready();
+        await settleDetailRefresh();
+      }
+      expect(consumer.presenter()).toMatchObject({
+        place: "Segunda Praia",
+        placeDetailVisual: "true",
+      });
+      expect(consumer.media()?.state).toBe("missing");
+      expect(
+        consumer.events.filter(
+          (event) => event.type === "morro:explore-state-changed",
+        ),
+      ).toHaveLength(1);
+    },
+  );
+
+  it("publishes selection before CSS, including a localized replacement, with the actual listener", async () => {
+    let ready!: () => void;
+    const styles = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const consumer = actualPlaceDetailConsumer(
+      "pt",
+      unexpectedDetail,
+      styles,
+      true,
+    );
+    await consumer.select(local());
+    expect(consumer.conversation.recentTurns().at(-1)?.cause).toBe(
+      "place_selected",
+    );
+    consumer.changeLocale("en");
+    await settleDetailRefresh();
+    ready();
+    await settleDetailRefresh();
+    expect(consumer.presenter().placeDetailVisual).toBe("true");
+    expect(
+      consumer.events.filter(
+        (event) => event.type === "morro:explore-state-changed",
+      ),
+    ).toHaveLength(2);
+  });
 
   it("keeps the local presentation unexpanded when feature CSS fails", async () => {
     let fail!: () => void;
