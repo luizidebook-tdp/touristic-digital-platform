@@ -465,6 +465,7 @@ describe("saved-place identity selection", () => {
         },
         copy: [],
         panelIsCurrent: () => true,
+        manualOperationSequence: 0,
         closeManual: () => {
           closed++;
         },

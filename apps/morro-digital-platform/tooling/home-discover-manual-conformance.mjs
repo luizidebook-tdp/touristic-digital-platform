@@ -960,8 +960,25 @@ async function verifyManualNavigation(page) {
         .isVisible(),
       "Canonical selection did not reach actual Place detail",
     );
+    const requestsBeforeReturn = requests.length;
     await page.locator('[data-home-nav-action="tours"]').click();
+    await waitCount(5);
+    assert(
+      (await panel.locator('input[type="search"]').inputValue()) ===
+        "Edited draft after results" &&
+        (await panel.locator("select").inputValue()) === "tours",
+      "Return erased the separate search draft",
+    );
+    assert(
+      (await status.textContent()).includes("21–25 / 25"),
+      "Return lost submitted page two",
+    );
+    assert(
+      requests.length === requestsBeforeReturn,
+      "Return submitted another HTTP search",
+    );
     await panel.locator('input[type="search"]').fill("Manual");
+    await panel.locator("select").selectOption("beaches");
     await panel.locator('button[type="submit"]').click();
     await waitCount(20);
     detailHeld = true;
@@ -999,7 +1016,18 @@ async function verifyManualNavigation(page) {
       "Old selection closed newer saved panel",
     );
     detailHeld = false;
+    const requestsBeforeSavedReturn = requests.length;
     await page.locator('[data-home-nav-action="tours"]').click();
+    await waitCount(20);
+    assert(
+      (await panel.locator('input[type="search"]').inputValue()) === "Manual" &&
+        (await panel.locator("select").inputValue()) === "beaches",
+      "Saved return lost search fields",
+    );
+    assert(
+      requests.length === requestsBeforeSavedReturn,
+      "Saved return submitted another HTTP search",
+    );
     responseMode = "empty";
     await panel.locator('button[type="submit"]').click();
     await waitCount(0);

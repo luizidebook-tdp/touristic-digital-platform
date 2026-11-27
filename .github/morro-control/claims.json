@@ -22,7 +22,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "infra/home-search-return-proof-20261127",
-      "baseSha": "480c560cf58b1d69f5af0a6a29acdde02a90ce9d",
+      "baseSha": "f0147bdbdad00d75eecd53a78b8a13d2fc2da5b9",
       "paths": [
         ".morro/changesets/MD-HOME-SEARCH-RETURN-PROOF-20261127.json",
         "apps/morro-digital-platform/src/home/home-discover-navigation.ts",
