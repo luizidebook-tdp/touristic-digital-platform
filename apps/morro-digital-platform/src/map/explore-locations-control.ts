@@ -1629,6 +1629,10 @@ export function installExploreLocationsControl({
     setSheetStatus("loading");
     if (!geospatialEngine?.initialized) {
       updateMapState(renderedMarkers.length, category, "error");
+      setExploreRuntimeStatus({
+        kind: "map-error",
+        error: new Error(getV1ExploreUiCopy(currentLocale()).mapUnknown),
+      });
       showMapFailure(retryDatasetRender);
       if (publishContext) emitStateChange();
       return;
@@ -1704,6 +1708,14 @@ export function installExploreLocationsControl({
         !isExploreLocationVisible(document, selected, nativeMap ?? currentMap())
       )
         frameLocationsOnMap(document, [selected], geospatialEngine);
+      if (
+        !publishContext &&
+        exploreRuntimeStatusDescriptor?.kind === "map-error" &&
+        activeStage === "detail" &&
+        activePlace
+      ) {
+        setExploreRuntimeStatus({ kind: "selected", place: activePlace });
+      }
       setSheetStatus(locations.length === 0 ? "empty" : "ready");
       if (!cameraOnly && publishContext) emitStateChange();
     } catch (error) {
@@ -2637,7 +2649,6 @@ export function installExploreLocationsControl({
 
     const publishSelection = (): void => {
       const mapFailed =
-        Boolean(canonicalPlaceId) &&
         document.getElementById("map")?.dataset.exploreState === "error";
       if (mapFailed) {
         setExploreRuntimeStatus({

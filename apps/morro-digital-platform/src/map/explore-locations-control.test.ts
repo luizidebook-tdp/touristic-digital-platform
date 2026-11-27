@@ -439,6 +439,7 @@ interface PlaceDetailConsumer {
   select(location: ExploreMapLocation): Promise<void>;
   changeLocale(locale: string): void;
   execute(command: ExploreLocationsCommand): Promise<boolean>;
+  getRuntimeStatus(): { kind: string } | undefined;
   setMapInitialized(value: boolean): void;
   failMarkers(): void;
   mapFailureCount(): number;
@@ -495,6 +496,8 @@ function actualPlaceDetailConsumer(
   const names = new Set([
     "CANONICAL_MAP_DESTINATION_ID",
     "emitStateChange",
+    "renderExploreRuntimeStatus",
+    "setExploreRuntimeStatus",
     "stateSnapshot",
     "renderPlaceDetailMessage",
     "readActivePlaceDetail",
@@ -529,14 +532,16 @@ function actualPlaceDetailConsumer(
     if (
       ts.isFunctionDeclaration(node) &&
       node.name &&
-      ["getCurrentPosition", "renderFilters"].includes(node.name.text)
+      ["getCurrentPosition", "renderFilters", "describeExploreError"].includes(
+        node.name.text,
+      )
     ) {
       functions.push(node.getText(ast));
     }
     ts.forEachChild(node, visit);
   };
   visit(ast);
-  if (declarations.length !== names.size || functions.length !== 2)
+  if (declarations.length !== names.size || functions.length !== 3)
     throw new Error(
       "Expected the actual place detail consumers and locale observer",
     );
@@ -588,6 +593,7 @@ function actualPlaceDetailConsumer(
         prepend(node){this.children.unshift(node);}
         replaceChildren(...nodes){
           this.children=nodes;
+          if(this.id==="runtime-status")this.textContent=nodes.map(node=>node.textContent??"").join("");
           if(this.className==="md-assistant-place-detail-description")this.textContent=nodes.map(node=>node.textContent).join("");
           if(this.id===ASSISTANT_FLOW_MESSAGE_ID){
             messages.push({name:nodes[0]?.textContent??"",description:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.textContent??"",lineBreaks:nodes.find(n=>n.className==="md-assistant-place-detail-description")?.children.filter(n=>n.tagName==="br").length??0});
@@ -604,6 +610,7 @@ function actualPlaceDetailConsumer(
       const ASSISTANT_FLOW_MESSAGE_ID="assistant-category-results-message";
       const ASSISTANT_FLOW_RESULTS_ID="assistant-category-results";
       const area=new HTMLElement();
+      const statusElement=new HTMLElement();statusElement.id="runtime-status";elements.set(statusElement.id,statusElement);
       const map=new HTMLElement();map.dataset.exploreState="ready";elements.set("map",map);
       map.getBoundingClientRect=()=>({left:0,top:0,width:390,height:844,right:390,bottom:844});
       let projectedPoint={x:100,y:100};
@@ -616,6 +623,7 @@ function actualPlaceDetailConsumer(
         querySelector:()=>null,querySelectorAll:selector=>selector.includes("morro-explore-marker")?mapMarkerElements:[],
         getElementById:id=>elements.get(id)??null,
         createElement:(tag)=>Object.assign(new HTMLElement(),{tagName:tag}),
+        createTextNode:text=>({textContent:text}),
         addEventListener:(type,listener)=>{const current=listeners.get(type)??new Set();current.add(listener);listeners.set(type,current);},
         removeEventListener:(type,listener)=>listeners.get(type)?.delete(listener),
         dispatchEvent:event=>{events.push(event);for(const listener of listeners.get(event.type)??[])listener(event);}};
@@ -643,10 +651,10 @@ function actualPlaceDetailConsumer(
       // Keep other menu boundaries thin; model the group source consumed by the single-message controller.
       const renderFlow=(text)=>{let message=elements.get(ASSISTANT_FLOW_MESSAGE_ID);if(!message){message=new HTMLElement();message.id=ASSISTANT_FLOW_MESSAGE_ID;area.appendChild(message);}message.dataset.messageType="category-flow";message.children=[];message.textContent=text;if(activeMarkerMembers){elements.get(ASSISTANT_FLOW_RESULTS_ID)?.remove();const results=new HTMLElement();results.id=ASSISTANT_FLOW_RESULTS_ID;results.setAttribute("aria-label",text);area.appendChild(results);}return null;};
       let mapFailures=0;const showMapFailure=()=>{mapFailures++;};
-      const setExploreRuntimeStatus=()=>{},emitStateChange=()=>{if(contextualEvents)publishExploreState();};
+      const emitStateChange=()=>{if(contextualEvents)publishExploreState();};
       const shareActivePlace=()=>{events.push({type:"share-observed",detail:{}});},tourTicketingUrl=()=>null,startImmersiveTour=()=>{},loadHybridGlobalMarkers=()=>{};
-      const refreshCategoryPresentation=()=>{},restoreCategoryRail=()=>{},renderExploreRuntimeStatus=()=>{};
-      const exploreRuntimeStatusDescriptor=null,immersiveTourController=null;
+      const refreshCategoryPresentation=()=>{},restoreCategoryRail=()=>{};
+      let exploreRuntimeStatusDescriptor;const immersiveTourController=null;
       ${functions.join("\n")}
       ${declarations.join("\n")}
       const options={document},conversation=getAssistantConversationOrchestrator(document),readExploreState=stateSnapshot;
@@ -661,6 +669,7 @@ function actualPlaceDetailConsumer(
         getFramingCalls:()=>framingCalls,
         setLocations:locations=>{visibleLocations=locations;datasetCategory="search";},getLocations:()=>visibleLocations,getRenderedLocations:()=>renderedLocations,getFramedLocations:()=>framedLocations,getSelectedMarkerIds:()=>mapMarkerElements.filter(el=>el.dataset.selected==="true").map(el=>el.dataset.markerId),
         listenerCount:type=>listeners.get(type)?.size??0,
+        getRuntimeStatus:()=>exploreRuntimeStatusDescriptor,
         setMapInitialized:value=>{geospatialEngine.initialized=value;},failMarkers:()=>{markerProviderReady=Promise.reject(new Error("provider unavailable"));},mapFailureCount:()=>mapFailures,
         holdMarkers:()=>{let release;markerProviderReady=new Promise(resolve=>{release=resolve;});return ()=>{markerProviderReady=Promise.resolve();release();};},
         holdPosition:()=>{holdPosition=true;return ()=>{holdPosition=false;resolvePosition?.({coords:{latitude:-13.38,longitude:-38.91}});};},
@@ -2947,6 +2956,14 @@ describe("local place selection presents its available detail directly", () => {
           (event) => event.type === "morro:explore-state-changed",
         ),
       ).toHaveLength(1);
+      expect(consumer.getRuntimeStatus()?.kind).toBe("map-error");
+      expect(
+        consumer.document.getElementById("runtime-status")?.textContent,
+      ).not.toBe(getV1ExploreUiCopy("pt").selected("Segunda Praia"));
+      consumer.changeLocale("en");
+      await settleDetailRefresh();
+      expect(consumer.getRuntimeStatus()?.kind).toBe("map-error");
+      expect(consumer.presenter().placeDetailVisual).toBe("true");
     },
   );
 
@@ -2975,6 +2992,33 @@ describe("local place selection presents its available detail directly", () => {
         (event) => event.type === "morro:explore-state-changed",
       ),
     ).toHaveLength(2);
+  });
+
+  it("clears an old map error after the current local map recovers", async () => {
+    const consumer = actualPlaceDetailConsumer(
+      "pt",
+      unexpectedDetail,
+      undefined,
+      true,
+    );
+    consumer.setMapInitialized(false);
+    await consumer.select(local());
+    expect(consumer.getRuntimeStatus()?.kind).toBe("map-error");
+    consumer.setMapInitialized(true);
+    await consumer.select(local("Quarta Praia"));
+    expect(
+      consumer.document
+        .getElementById("map")
+        ?.getAttribute("data-explore-state"),
+    ).toBe("ready");
+    expect(consumer.getRuntimeStatus()?.kind).toBe("selected");
+    expect(
+      consumer.document.getElementById("runtime-status")?.textContent,
+    ).toBe(getV1ExploreUiCopy("pt").selected("Quarta Praia"));
+    expect(consumer.presenter()).toMatchObject({
+      place: "Quarta Praia",
+      placeDetailVisual: "true",
+    });
   });
 
   it("keeps the local presentation unexpanded when feature CSS fails", async () => {
