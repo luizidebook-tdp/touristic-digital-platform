@@ -18,6 +18,22 @@
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-28T02:45:25.605Z"
+    },
+    "MD-MAP-EXPLORE-CSS-20261127-R2": {
+      "owner": "CHATGPT-PRO-CONTROL",
+      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
+      "branch": "infra/acquire-map-explore-css-20261127-r2",
+      "baseSha": "a6cfe7d281b47294c2035b896d108bd49f79d0ed",
+      "paths": [
+        ".morro/changesets/MD-MAP-EXPLORE-CSS-20261127-R2.json",
+        "apps/morro-digital-platform/public/explore-locations.css",
+        "apps/morro-digital-platform/src/ux/place-search-explore-v2-contract.test.ts",
+        "tooling/ci/entry-css-manifest.json"
+      ],
+      "domains": ["map", "ci-release"],
+      "risk": "P1",
+      "status": "IMPLEMENTING",
+      "expiresAt": "2026-11-28T04:30:00.000Z"
     }
   }
 }
