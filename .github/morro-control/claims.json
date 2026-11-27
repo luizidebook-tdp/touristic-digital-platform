@@ -23,7 +23,7 @@
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
       "branch": "infra/acquire-map-explore-css-20261127-r2",
-      "baseSha": "a6cfe7d281b47294c2035b896d108bd49f79d0ed",
+      "baseSha": "ef93c0a2cb851394c42a0e27125aa50b684ea5c5",
       "paths": [
         ".morro/changesets/MD-MAP-EXPLORE-CSS-20261127-R2.json",
         "apps/morro-digital-platform/public/explore-locations.css",
