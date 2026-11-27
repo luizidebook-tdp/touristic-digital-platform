@@ -35,6 +35,7 @@ function createElement(initialClasses: string[] = []) {
   const attributes = new Map<string, string>();
   const contained = new Set<unknown>();
   let focusCount = 0;
+  let focusEffect: (() => void) | undefined;
   return {
     classList: createClassList(initialClasses),
     attributes,
@@ -53,8 +54,8 @@ function createElement(initialClasses: string[] = []) {
     removeEventListener(type: string) {
       listeners.delete(type);
     },
-    dispatch(type: string) {
-      listeners.get(type)?.({ type } as Event);
+    dispatch(type: string, target?: unknown) {
+      listeners.get(type)?.({ type, target } as Event);
     },
     querySelector(selector: string) {
       void selector;
@@ -66,8 +67,12 @@ function createElement(initialClasses: string[] = []) {
     contain(element: unknown) {
       contained.add(element);
     },
+    setFocusEffect(effect: () => void) {
+      focusEffect = effect;
+    },
     focus() {
       focusCount += 1;
+      focusEffect?.();
     },
     get focusCount() {
       return focusCount;
@@ -96,6 +101,8 @@ function fixture(entryMarker = false) {
   const localeObservers: Array<{ notify(): void; connected: boolean }> = [];
   const observedLocaleOptions: MutationObserverInit[] = [];
   composer.contain(input);
+  assistant.contain(minimize);
+  Object.assign(input, { id: "assistantInput" });
 
   const document = {
     body,
@@ -147,6 +154,14 @@ function fixture(entryMarker = false) {
       documentListeners.delete(type);
     },
   } as unknown as Document;
+
+  for (const element of [input, minimize, external]) {
+    element.setFocusEffect(() => {
+      if (document.activeElement === (element as unknown as Element)) return;
+      Object.assign(document, { activeElement: element });
+      if (composer.contains(element)) composer.dispatch("focusin", element);
+    });
+  }
 
   return {
     document,
@@ -733,3 +748,28 @@ describe("assistant live status follows document locale", () => {
     },
   );
 });
+
+it.each(["composer", "fallback"] as const)(
+  "keeps the Assistant closed while restoring %s focus and permits a new manual click",
+  (origin) => {
+    const view = fixture();
+    if (origin === "fallback")
+      Object.assign(view.document, { activeElement: null });
+    const shell = installAssistantShellUi({ document: view.document });
+    shell.show();
+    view.minimize.focus();
+    view.minimize.dispatch("click", view.minimize);
+    for (const run of view.scheduled) run();
+
+    expect(shell.isVisible()).toBe(false);
+    expect(view.assistant.attributes.get("aria-hidden")).toBe("true");
+    expect(view.input.attributes.get("aria-expanded")).toBe("false");
+    expect(view.document.activeElement).toBe(view.input);
+    expect(view.input.focusCount).toBe(1);
+
+    // This input is already focused: a new click need not emit focusin.
+    view.composer.dispatch("click", view.input);
+    expect(shell.isVisible()).toBe(true);
+    shell.destroy();
+  },
+);

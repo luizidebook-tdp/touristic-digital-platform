@@ -124,6 +124,7 @@ export function installAssistantShellUi(
   let destroyed = false;
   let currentState: AssistantUiState = "idle";
   let previousFocus: Element | null = null;
+  let restoringFocus = false;
   let pendingFocusTimer: number | undefined;
 
   const cancelPendingFocus = (): void => {
@@ -165,7 +166,12 @@ export function installAssistantShellUi(
         ? previousFocus
         : focusTarget;
     previousFocus = null;
-    if (!focusElement(candidate)) focusElement(focusTarget);
+    restoringFocus = true;
+    try {
+      if (!focusElement(candidate)) focusElement(focusTarget);
+    } finally {
+      restoringFocus = false;
+    }
   };
 
   const show = (): boolean => {
@@ -237,10 +243,16 @@ export function installAssistantShellUi(
   };
 
   const onComposerFocusIn = (event: FocusEvent): void => {
+    if (restoringFocus) return;
     cancelPendingFocus();
     const target = event.target as { id?: string } | null;
     if (target?.id === "configButton") return;
     if (!isVisible()) show();
+  };
+  const onComposerClick = (event: MouseEvent): void => {
+    if (restoringFocus) return;
+    const target = event.target as { id?: string } | null;
+    if (target?.id === "assistantInput" && !isVisible()) show();
   };
   const onAssistantOpenRequest = (): void => {
     show();
@@ -295,6 +307,7 @@ export function installAssistantShellUi(
   composer?.setAttribute("data-assistant-shell-ready", "true");
   setState("idle");
   composer?.addEventListener("focusin", onComposerFocusIn);
+  composer?.addEventListener("click", onComposerClick);
   minimizeButton?.addEventListener("click", onMinimizeClick);
   options.document.addEventListener(
     ASSISTANT_OPEN_REQUEST_EVENT,
@@ -326,6 +339,7 @@ export function installAssistantShellUi(
       localeObserver?.disconnect();
       cancelPendingFocus();
       composer?.removeEventListener("focusin", onComposerFocusIn);
+      composer?.removeEventListener("click", onComposerClick);
       composer?.removeAttribute("data-assistant-shell-ready");
       minimizeButton?.removeEventListener("click", onMinimizeClick);
       options.document.removeEventListener(
