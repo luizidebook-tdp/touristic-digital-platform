@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-HOME-SEARCH-RETURN-PROOF-20261127",
+  "objective": "authorize-home-search-return-and-browser-proof-alignment",
+  "baseSha": "480c560cf58b1d69f5af0a6a29acdde02a90ce9d",
+  "branch": "infra/home-search-return-proof-20261127",
+  "state": "IMPLEMENTING",
+  "risk": "high",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-HOME-SEARCH-RETURN-PROOF-20261127.json",
+      "apps/morro-digital-platform/src/home/home-discover-navigation.ts",
+      "apps/morro-digital-platform/src/home/home-discover-navigation.test.ts",
+      "apps/morro-digital-platform/src/ux/home-discover-manual-conformance.test.ts",
+      "apps/morro-digital-platform/tooling/home-discover-manual-conformance.mjs"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": []
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": ["changeset", "git-identity", "ownership", "proof-plan"]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 300
+    },
+    "commands": [
+      {
+        "id": "claim-lifecycle-contract",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/control-state/mdctl-claim-lifecycle.test.mjs"
+        ],
+        "timeoutSeconds": 300
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
