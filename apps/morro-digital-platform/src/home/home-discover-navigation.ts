@@ -358,6 +358,7 @@ export function installHomeDiscoverNavigation({
   let searchAbort: AbortController | undefined;
   let manualAction = "tours";
   let manualPanelGeneration = 0;
+  let manualOperationSequence = 0;
   let refreshManualLocale: (() => void) | undefined;
   let captureManualDraft: (() => void) | undefined;
   let manualSearchDraft = { query: "", category: "" };
@@ -429,6 +430,9 @@ export function installHomeDiscoverNavigation({
       destinationId?: string;
     }): Promise<void> => {
       if (!panelIsCurrent()) return;
+      const operation = ++manualOperationSequence;
+      const selectionIsCurrent = () =>
+        panelIsCurrent() && operation === manualOperationSequence;
       if (
         action === "saved" &&
         (place.placeId || place.destinationId) &&
@@ -438,18 +442,24 @@ export function installHomeDiscoverNavigation({
         return;
       }
       const explore = getMorroDigitalApplication(document)?.exploreLocations;
-      const selected =
-        explore &&
-        (await explore.execute(
-          place.placeId
-            ? { type: "select_place_id", placeId: place.placeId }
-            : {
-                type: "select_place",
-                place: place.name,
-                ...(place.category ? { category: place.category } : {}),
-              },
-        ));
-      if (!panelIsCurrent()) return;
+      let selected: boolean | undefined;
+      try {
+        selected =
+          explore &&
+          (await explore.execute(
+            place.placeId
+              ? { type: "select_place_id", placeId: place.placeId }
+              : {
+                  type: "select_place",
+                  place: place.name,
+                  ...(place.category ? { category: place.category } : {}),
+                },
+          ));
+      } catch {
+        if (selectionIsCurrent()) showStatus(() => copy[14]);
+        return;
+      }
+      if (!selectionIsCurrent()) return;
       if (selected) closeManual();
       else showStatus(() => copy[14]);
     };
@@ -564,7 +574,6 @@ export function installHomeDiscoverNavigation({
       next.textContent = copy[18];
       refreshResultLabels?.();
     };
-    let pageGeneration = 0;
     const renderPage = async (
       page: number,
       abort: AbortController,
@@ -572,7 +581,12 @@ export function installHomeDiscoverNavigation({
     ): Promise<void> => {
       const state = manualSearchState;
       if (!state || abort.signal.aborted || !panelIsCurrent()) return;
-      const generation = ++pageGeneration;
+      const operation = ++manualOperationSequence;
+      const pageIsCurrent = () =>
+        !abort.signal.aborted &&
+        panelIsCurrent() &&
+        operation === manualOperationSequence &&
+        state === manualSearchState;
       const valid = state.snapshot.results.filter(
         (result) =>
           result.name.trim() &&
@@ -590,22 +604,22 @@ export function installHomeDiscoverNavigation({
       list.replaceChildren();
       const explore = getMorroDigitalApplication(document)?.exploreLocations;
       // The map indexes only 20 results: install the current UI page before selection.
-      const ready =
-        explore &&
-        (await explore.execute({
-          type: "show_search_results",
-          query: state.query,
-          ...(state.category ? { category: state.category } : {}),
-          results: displayed,
-          status: displayed.length ? "ready" : "empty",
-        }));
-      if (
-        abort.signal.aborted ||
-        !panelIsCurrent() ||
-        generation !== pageGeneration ||
-        state !== manualSearchState
-      )
+      let ready: boolean | undefined;
+      try {
+        ready =
+          explore &&
+          (await explore.execute({
+            type: "show_search_results",
+            query: state.query,
+            ...(state.category ? { category: state.category } : {}),
+            results: displayed,
+            status: displayed.length ? "ready" : "empty",
+          }));
+      } catch {
+        if (pageIsCurrent()) showStatus(() => copy[14]);
         return;
+      }
+      if (!pageIsCurrent()) return;
       showStatus(
         () =>
           `${copy[{ canonical: 9, local: 10, map: 19 }[state.snapshot.source]]} · ${displayed.length ? start + 1 : 0}–${start + displayed.length} / ${valid.length}${displayed.length ? "" : ` · ${copy[11]}`}${ready ? "" : ` · ${copy[14]}`}`,
@@ -628,11 +642,7 @@ export function installHomeDiscoverNavigation({
     };
     const changePage = (delta: number): void => {
       if (!panelIsCurrent() || !manualSearchState || !searchAbort) return;
-      void renderPage(manualSearchState.page + delta, searchAbort, true).catch(
-        () => {
-          if (panelIsCurrent()) showStatus(() => copy[14]);
-        },
-      );
+      void renderPage(manualSearchState.page + delta, searchAbort, true);
     };
     previous.onclick = () => changePage(-1);
     next.onclick = () => changePage(1);
@@ -640,6 +650,7 @@ export function installHomeDiscoverNavigation({
       event.preventDefault();
       if (!panelIsCurrent()) return;
       captureManualDraft?.();
+      manualOperationSequence += 1;
       searchAbort?.abort();
       const abort = new AbortController();
       searchAbort = abort;
@@ -669,10 +680,7 @@ export function installHomeDiscoverNavigation({
     if (manualSearchState) {
       const abort = new AbortController();
       searchAbort = abort;
-      void renderPage(manualSearchState.page, abort).catch(() => {
-        if (!abort.signal.aborted && panelIsCurrent())
-          showStatus(() => copy[14]);
-      });
+      void renderPage(manualSearchState.page, abort);
     }
     input.focus();
   };

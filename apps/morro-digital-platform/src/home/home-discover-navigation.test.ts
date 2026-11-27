@@ -369,4 +369,51 @@ describe("Home search return context", () => {
     await settle();
     expect(panel.querySelector("ul")!.children).toHaveLength(0);
   });
+
+  it("keeps a new search status when the previous page request rejects", async () => {
+    const f = await fixture();
+    f.open();
+    await f.submit();
+    const page = deferred<boolean>();
+    f.execute.mockImplementationOnce(() => page.promise);
+    f.panel().querySelector('[data-manual-page="next"]')!.onclick!();
+    await settle();
+    const search = deferred<{ source: string; results: typeof places }>();
+    f.search.mockImplementationOnce(() => search.promise);
+    await f.submit("New query");
+    const status = f.panel().querySelector("p")!.textContent;
+    page.reject(new Error("Old page failed"));
+    await settle();
+    expect(f.panel().querySelector("p")!.textContent).toBe(status);
+    search.resolve({ source: "map", results: places.slice(0, 1) });
+    await settle();
+    expect(f.rows()).toHaveLength(1);
+  });
+
+  it.each(["resolve", "reject"] as const)(
+    "does not close or change a later search after old selection %s",
+    async (outcome) => {
+      const f = await fixture();
+      f.open();
+      await f.submit();
+      const selection = deferred<boolean>();
+      f.execute.mockImplementationOnce(() => selection.promise);
+      f.rows()[0]!.onclick!();
+      await settle();
+      const search = deferred<{ source: string; results: typeof places }>();
+      f.search.mockImplementationOnce(() => search.promise);
+      await f.submit("Next");
+      const signal = f.search.mock.calls.at(-1)![2];
+      const status = f.panel().querySelector("p")!.textContent;
+      if (outcome === "resolve") selection.resolve(true);
+      else selection.reject(new Error("Old selection"));
+      await settle();
+      expect(f.panel().hidden).toBe(false);
+      expect(signal.aborted).toBe(false);
+      expect(f.panel().querySelector("p")!.textContent).toBe(status);
+      search.resolve({ source: "map", results: places.slice(0, 1) });
+      await settle();
+      expect(f.rows()).toHaveLength(1);
+    },
+  );
 });
