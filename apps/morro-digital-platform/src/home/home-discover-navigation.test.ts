@@ -134,13 +134,16 @@ async function fixture() {
     dispatchEvent: () => {},
   };
   let localeChanged = () => {};
-  const execute = vi.fn(async (_command: unknown): Promise<boolean> => true);
-  const search = vi.fn(
-    async (_query: string, _category: string, _signal: AbortSignal) => ({
-      source: "map",
-      results: places,
-    }),
+  const execute = vi.fn<(command: unknown) => Promise<boolean>>(
+    async () => true,
   );
+  const search = vi.fn<
+    (
+      query: string,
+      category: string,
+      signal: AbortSignal,
+    ) => Promise<{ source: string; results: typeof places }>
+  >(async () => ({ source: "map", results: places }));
   const exports: Record<string, (...args: unknown[]) => { destroy(): void }> =
     {};
   const source = await readFile(
