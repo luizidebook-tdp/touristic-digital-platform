@@ -1465,3 +1465,17 @@ body:has(#map[data-tour-flow-stage="stop"])
   min-height: 3rem;
   min-width: 3rem;
 }
+
+#unified-assistant-dock
+  > #assistant-messages.md-assistant-message-region.has-rich-content
+  .minimize-button {
+  display: grid;
+  position: sticky;
+  top: 0;
+  inset-inline-end: 0;
+  align-self: flex-end;
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  z-index: var(--md-layer-explore-controls);
+  background: var(--md-color-surface-card);
+}
