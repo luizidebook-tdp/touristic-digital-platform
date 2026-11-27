@@ -359,6 +359,8 @@ export function installHomeDiscoverNavigation({
   let manualAction = "tours";
   let manualPanelGeneration = 0;
   let refreshManualLocale: (() => void) | undefined;
+  let captureManualDraft: (() => void) | undefined;
+  let manualSearchDraft = { query: "", category: "" };
   let manualSearchState:
     | {
         query: string;
@@ -370,6 +372,8 @@ export function installHomeDiscoverNavigation({
   const manualCopy = () =>
     MANUAL_COPY[normalizeLocale(document.documentElement.lang || "pt")];
   const closeManual = (restoreFocus = false): void => {
+    captureManualDraft?.();
+    captureManualDraft = undefined;
     featureStyles.cancel();
     manualPanelGeneration += 1;
     refreshManualLocale = undefined;
@@ -389,7 +393,6 @@ export function installHomeDiscoverNavigation({
       panelGeneration === manualPanelGeneration &&
       !manualPanel.hidden;
     manualAction = action;
-    manualSearchState = undefined;
     setActive(action);
     let copy = manualCopy();
     manualPanel.replaceChildren();
@@ -425,6 +428,7 @@ export function installHomeDiscoverNavigation({
       placeId?: string;
       destinationId?: string;
     }): Promise<void> => {
+      if (!panelIsCurrent()) return;
       if (
         action === "saved" &&
         (place.placeId || place.destinationId) &&
@@ -521,6 +525,11 @@ export function installHomeDiscoverNavigation({
       option.textContent = copy[index + 2] ?? copy[2];
       category.append(option);
     });
+    input.value = manualSearchDraft.query;
+    category.value = manualSearchDraft.category;
+    captureManualDraft = () => {
+      manualSearchDraft = { query: input.value, category: category.value };
+    };
     const submit = document.createElement("button");
     submit.type = "submit";
     submit.textContent = copy[6];
@@ -562,7 +571,7 @@ export function installHomeDiscoverNavigation({
       focusResult = false,
     ): Promise<void> => {
       const state = manualSearchState;
-      if (!state || abort.signal.aborted || destroyed) return;
+      if (!state || abort.signal.aborted || !panelIsCurrent()) return;
       const generation = ++pageGeneration;
       const valid = state.snapshot.results.filter(
         (result) =>
@@ -590,7 +599,12 @@ export function installHomeDiscoverNavigation({
           results: displayed,
           status: displayed.length ? "ready" : "empty",
         }));
-      if (abort.signal.aborted || destroyed || generation !== pageGeneration)
+      if (
+        abort.signal.aborted ||
+        !panelIsCurrent() ||
+        generation !== pageGeneration ||
+        state !== manualSearchState
+      )
         return;
       showStatus(
         () =>
@@ -613,10 +627,10 @@ export function installHomeDiscoverNavigation({
       if (focusResult) list.querySelector<HTMLButtonElement>("button")?.focus();
     };
     const changePage = (delta: number): void => {
-      if (!manualSearchState || !searchAbort) return;
+      if (!panelIsCurrent() || !manualSearchState || !searchAbort) return;
       void renderPage(manualSearchState.page + delta, searchAbort, true).catch(
         () => {
-          showStatus(() => copy[14]);
+          if (panelIsCurrent()) showStatus(() => copy[14]);
         },
       );
     };
@@ -624,6 +638,8 @@ export function installHomeDiscoverNavigation({
     next.onclick = () => changePage(1);
     form.onsubmit = (event) => {
       event.preventDefault();
+      if (!panelIsCurrent()) return;
+      captureManualDraft?.();
       searchAbort?.abort();
       const abort = new AbortController();
       searchAbort = abort;
@@ -636,7 +652,7 @@ export function installHomeDiscoverNavigation({
       pager.hidden = true;
       void searchPlaces(query, selectedCategory, abort.signal)
         .then(async (snapshot) => {
-          if (abort.signal.aborted || destroyed) return;
+          if (abort.signal.aborted || !panelIsCurrent()) return;
           manualSearchState = {
             query,
             category: selectedCategory,
@@ -646,9 +662,18 @@ export function installHomeDiscoverNavigation({
           await renderPage(0, abort);
         })
         .catch(() => {
-          if (!abort.signal.aborted && !destroyed) showStatus(() => copy[14]);
+          if (!abort.signal.aborted && panelIsCurrent())
+            showStatus(() => copy[14]);
         });
     };
+    if (manualSearchState) {
+      const abort = new AbortController();
+      searchAbort = abort;
+      void renderPage(manualSearchState.page, abort).catch(() => {
+        if (!abort.signal.aborted && panelIsCurrent())
+          showStatus(() => copy[14]);
+      });
+    }
     input.focus();
   };
 
