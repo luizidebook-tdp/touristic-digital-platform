@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-HOME-SEARCH-RETURN-PROOF-20261127",
   "objective": "authorize-home-search-return-and-browser-proof-alignment",
-  "baseSha": "480c560cf58b1d69f5af0a6a29acdde02a90ce9d",
+  "baseSha": "f0147bdbdad00d75eecd53a78b8a13d2fc2da5b9",
   "branch": "infra/home-search-return-proof-20261127",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {
