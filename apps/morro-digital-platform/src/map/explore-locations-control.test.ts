@@ -2692,6 +2692,125 @@ describe("manual visual pilot in the active detail flow", () => {
   });
 });
 
+describe("local place selection presents its available detail directly", () => {
+  const local = (name = "Segunda Praia"): ExploreMapLocation => ({
+    name,
+    category: "beaches",
+    latitude: -13.379,
+    longitude: -38.914,
+    source: "local",
+    description: "Descrição disponível no catálogo local.",
+  });
+  const unexpectedDetail = (): never => {
+    throw new Error("Local places must not be resolved through a canonical ID");
+  };
+
+  it.each(["pt", "en", "es", "he"] as const)(
+    "opens an expanded local detail without invented identity or media (%s)",
+    async (locale) => {
+      const consumer = actualPlaceDetailConsumer(locale, unexpectedDetail);
+      await consumer.select(local());
+      expect(consumer.presenter()).toMatchObject({
+        place: "Segunda Praia",
+        placeDetailVisual: "true",
+      });
+      expect(consumer.presenter().placeId).toBeUndefined();
+      expect(consumer.snapshot()).toMatchObject({
+        stage: "detail",
+        detailRequests: 0,
+      });
+      expect(consumer.media()).toEqual({ state: "missing", src: undefined });
+      expect(consumer.detailOrder()).toEqual([
+        "md-assistant-place-detail-title",
+        "md-place-detail-media",
+        "md-assistant-place-detail-meta",
+        "md-assistant-place-detail-description",
+      ]);
+    },
+  );
+
+  it.each(["selection", "action", "conversation", "minimize"] as const)(
+    "does not restore a stale local detail after %s while CSS is pending",
+    async (change) => {
+      let ready!: () => void;
+      const styles = new Promise<void>((resolve) => {
+        ready = resolve;
+      });
+      const consumer = actualPlaceDetailConsumer(
+        "pt",
+        unexpectedDetail,
+        styles,
+      );
+      await consumer.select(local());
+      expect(consumer.media()).toBeUndefined();
+      if (change === "selection") await consumer.select(local("Quarta Praia"));
+      if (change === "action") consumer.click("como chegar");
+      if (change === "conversation") consumer.conversation.issueSequence();
+      if (change === "minimize") consumer.setAssistantHidden(true);
+      ready();
+      await settleDetailRefresh();
+      if (change === "selection") {
+        expect(consumer.presenter()).toMatchObject({
+          place: "Quarta Praia",
+          placeDetailVisual: "true",
+        });
+        expect(consumer.media()?.state).toBe("missing");
+      } else expect(consumer.media()).toBeUndefined();
+      expect(consumer.snapshot().detailRequests).toBe(0);
+    },
+  );
+
+  it("refreshes local fallback labels after deferred CSS without moving the map", async () => {
+    let ready!: () => void;
+    const styles = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const consumer = actualPlaceDetailConsumer("pt", unexpectedDetail, styles);
+    await consumer.select(local());
+    const mapCalls = consumer.snapshot().mapCalls;
+    consumer.changeLocale("en");
+    await settleDetailRefresh();
+    ready();
+    await settleDetailRefresh();
+    expect(consumer.presenter()).toMatchObject({
+      place: "Segunda Praia",
+      placeDetailVisual: "true",
+    });
+    expect(consumer.media()?.state).toBe("missing");
+    expect(consumer.snapshot()).toMatchObject({ mapCalls, detailRequests: 0 });
+  });
+
+  it("preserves an explicit local answer during a locale refresh", async () => {
+    const consumer = actualPlaceDetailConsumer("pt", unexpectedDetail);
+    await consumer.select(local());
+    consumer.setPresenterData({
+      placeDetailVisual: "",
+      conversationTurnId: "explicit-local-answer",
+      conversationCause: "place_details",
+    });
+    const count = consumer.messages.length;
+    consumer.changeLocale("en");
+    await settleDetailRefresh();
+    expect(consumer.messages).toHaveLength(count);
+    expect(consumer.presenter().conversationTurnId).toBe(
+      "explicit-local-answer",
+    );
+  });
+
+  it("keeps the local presentation unexpanded when feature CSS fails", async () => {
+    let fail!: () => void;
+    const styles = new Promise<void>((_, reject) => {
+      fail = () => reject(new Error("styles unavailable"));
+    });
+    const consumer = actualPlaceDetailConsumer("pt", unexpectedDetail, styles);
+    await consumer.select(local());
+    fail();
+    await styles.catch(() => undefined);
+    expect(consumer.media()).toBeUndefined();
+    expect(consumer.snapshot().detailRequests).toBe(0);
+  });
+});
+
 // Media and layout contracts stay beside their owning active controller.
 describe("canonical detail media presentation", () => {
   const media = (

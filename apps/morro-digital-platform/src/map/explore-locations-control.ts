@@ -1823,7 +1823,7 @@ export function installExploreLocationsControl({
     description: string,
     turn?: ConversationTurn,
     visual?: Readonly<{
-      placeId: string;
+      placeId?: string;
       media?: PublicPlaceMediaProjection | null;
     }>,
   ): void => {
@@ -1909,7 +1909,7 @@ export function installExploreLocationsControl({
         createPlaceDetailMedia(
           document,
           visual.media ?? null,
-          visual.placeId,
+          visual.placeId ?? "",
           location.name,
           currentLocale(),
           categoryLabel,
@@ -2754,9 +2754,49 @@ export function installExploreLocationsControl({
       }
     }
 
+    const presentLocalDetail = (): void => {
+      const message = document.getElementById(ASSISTANT_FLOW_MESSAGE_ID);
+      if (!message) return;
+      // A locale update may refresh this detail or its pending selection,
+      // but must not replace an explicit answer already presented.
+      if (
+        refreshingLocale &&
+        message.dataset.placeDetailVisual !== "true" &&
+        message.dataset.conversationTurnId &&
+        message.dataset.conversationCause !== "place_selected"
+      )
+        return;
+      const sequence = conversation.issueSequence();
+      placeDetailStyles.run(() => {
+        if (
+          destroyed ||
+          generation !== interactionGeneration ||
+          activeStage !== "detail" ||
+          activePlaceLocation !== presentationLocation ||
+          locale !== currentLocale() ||
+          !conversation.isCurrentSequence(sequence) ||
+          document.getElementById(ASSISTANT_FLOW_MESSAGE_ID) !== message ||
+          document
+            .getElementById("assistant-messages")
+            ?.getAttribute("aria-hidden") === "true"
+        )
+          return;
+        renderPlaceDetailMessage(
+          presentationLocation,
+          categoryLabel,
+          description,
+          undefined,
+          { media: null },
+        );
+      });
+    };
+
     // Locale refresh changes presentation, not the selected place or map.
     // Keep the confirmed description until a current translation is available.
-    if (refreshingLocale) return;
+    if (refreshingLocale) {
+      if (!canonicalPlaceId) presentLocalDetail();
+      return;
+    }
 
     if (
       generation !== interactionGeneration ||
@@ -2781,6 +2821,7 @@ export function installExploreLocationsControl({
       });
     }
     emitStateChange();
+    if (!canonicalPlaceId) presentLocalDetail();
   };
 
   const renderPlaces = (
