@@ -2231,6 +2231,8 @@ export function installExploreLocationsControl({
 
   const handlePlaceAction = (value: string): void => {
     placeDetailStyles.cancel();
+    // A newer action also cancels selection work still waiting for the map.
+    getAssistantConversationOrchestrator(document).issueSequence();
     if (value.startsWith("place-action:share:")) {
       const location = activePlaceLocation;
       if (
@@ -2579,6 +2581,9 @@ export function installExploreLocationsControl({
       currentCategories().find((candidate) => candidate.value === category)
         ?.label ?? category;
     const conversation = getAssistantConversationOrchestrator(document);
+    const localSelectionSequence = canonicalPlaceId
+      ? undefined
+      : conversation.issueSequence();
     const previousTurn = conversation.recentTurns().at(-1);
     const refreshDetails =
       refreshingLocale &&
@@ -2754,6 +2759,23 @@ export function installExploreLocationsControl({
       }
     }
 
+    const publishSelection = (): void => {
+      const mapFailed =
+        document.getElementById("map")?.dataset.exploreState === "error";
+      if (mapFailed) {
+        setExploreRuntimeStatus({
+          kind: "map-error",
+          error: new Error(getV1ExploreUiCopy(locale).mapUnknown),
+        });
+      } else {
+        setExploreRuntimeStatus({
+          kind: "selected",
+          place: presentationLocation.name,
+        });
+      }
+      emitStateChange();
+    };
+
     const presentLocalDetail = (): void => {
       const message = document.getElementById(ASSISTANT_FLOW_MESSAGE_ID);
       if (!message) return;
@@ -2761,12 +2783,13 @@ export function installExploreLocationsControl({
       // but must not replace an explicit answer already presented.
       if (
         refreshingLocale &&
-        message.dataset.placeDetailVisual !== "true" &&
         message.dataset.conversationTurnId &&
         message.dataset.conversationCause !== "place_selected"
       )
         return;
-      const sequence = conversation.issueSequence();
+      const sequence = localSelectionSequence;
+      if (sequence === undefined || !conversation.isCurrentSequence(sequence))
+        return;
       placeDetailStyles.run(() => {
         if (
           destroyed ||
@@ -2788,6 +2811,7 @@ export function installExploreLocationsControl({
           undefined,
           { media: null },
         );
+        if (!refreshingLocale) publishSelection();
       });
     };
 
@@ -2807,21 +2831,8 @@ export function installExploreLocationsControl({
       return;
     }
 
-    const mapFailed =
-      document.getElementById("map")?.dataset.exploreState === "error";
-    if (mapFailed) {
-      setExploreRuntimeStatus({
-        kind: "map-error",
-        error: new Error(getV1ExploreUiCopy(locale).mapUnknown),
-      });
-    } else {
-      setExploreRuntimeStatus({
-        kind: "selected",
-        place: presentationLocation.name,
-      });
-    }
-    emitStateChange();
-    if (!canonicalPlaceId) presentLocalDetail();
+    if (canonicalPlaceId) publishSelection();
+    else presentLocalDetail();
   };
 
   const renderPlaces = (

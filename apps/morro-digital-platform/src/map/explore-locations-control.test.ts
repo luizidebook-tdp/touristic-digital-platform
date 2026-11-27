@@ -2780,22 +2780,46 @@ describe("local place selection presents its available detail directly", () => {
     expect(consumer.snapshot()).toMatchObject({ mapCalls, detailRequests: 0 });
   });
 
-  it("preserves an explicit local answer during a locale refresh", async () => {
-    const consumer = actualPlaceDetailConsumer("pt", unexpectedDetail);
-    await consumer.select(local());
-    consumer.setPresenterData({
-      placeDetailVisual: "",
-      conversationTurnId: "explicit-local-answer",
-      conversationCause: "place_details",
-    });
-    const count = consumer.messages.length;
-    consumer.changeLocale("en");
-    await settleDetailRefresh();
-    expect(consumer.messages).toHaveLength(count);
-    expect(consumer.presenter().conversationTurnId).toBe(
-      "explicit-local-answer",
-    );
-  });
+  it.each([false, true])(
+    "preserves an explicit local answer during a locale refresh (visual=%s)",
+    async (visual) => {
+      const consumer = actualPlaceDetailConsumer("pt", unexpectedDetail);
+      await consumer.select(local());
+      consumer.setPresenterData({
+        placeDetailVisual: visual ? "true" : "",
+        conversationTurnId: "explicit-local-answer",
+        conversationCause: "place_details",
+      });
+      const count = consumer.messages.length;
+      consumer.changeLocale("en");
+      await settleDetailRefresh();
+      expect(consumer.messages).toHaveLength(count);
+      expect(consumer.presenter().conversationTurnId).toBe(
+        "explicit-local-answer",
+      );
+    },
+  );
+
+  it.each(["action", "conversation"] as const)(
+    "does not recover local presentation authority after a newer %s while markers load",
+    async (change) => {
+      const consumer = actualPlaceDetailConsumer("pt", unexpectedDetail);
+      const releaseMarkers = consumer.holdMarkers();
+      const selection = consumer.select(local());
+      await settleDetailRefresh();
+      expect(consumer.snapshot().mapCalls).toBe(1);
+      let newerSequence: number | undefined;
+      if (change === "action") consumer.click("como chegar");
+      else newerSequence = consumer.conversation.issueSequence();
+      releaseMarkers();
+      await selection;
+      expect(consumer.media()).toBeUndefined();
+      if (newerSequence !== undefined)
+        expect(consumer.conversation.isCurrentSequence(newerSequence)).toBe(
+          true,
+        );
+    },
+  );
 
   it("keeps the local presentation unexpanded when feature CSS fails", async () => {
     let fail!: () => void;
