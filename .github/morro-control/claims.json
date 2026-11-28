@@ -18,20 +18,6 @@
       "risk": "P1",
       "status": "IMPLEMENTING",
       "expiresAt": "2026-11-28T02:45:25.605Z"
-    },
-    "MD-RETIREMENT-TEST-ISOLATION-20261128": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "infra/acquire-retirement-test-isolation-20261128",
-      "baseSha": "e140248cdbfa6f4a3b1ccab7e50c2867251413a4",
-      "paths": [
-        ".morro/changesets/MD-RETIREMENT-TEST-ISOLATION-20261128.json",
-        "tooling/fabric/claim-retirement-proof.test.mjs"
-      ],
-      "domains": ["ci-release"],
-      "risk": "P1",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-28T04:46:00.000Z"
     }
   }
 }

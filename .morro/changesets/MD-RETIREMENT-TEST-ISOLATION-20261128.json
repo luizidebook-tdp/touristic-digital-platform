@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-RETIREMENT-TEST-ISOLATION-20261128",
   "objective": "isolate-retirement-transport-tests-from-inherited-environment",
-  "baseSha": "e140248cdbfa6f4a3b1ccab7e50c2867251413a4",
-  "branch": "infra/acquire-retirement-test-isolation-20261128",
-  "state": "LOCAL_PROVEN",
+  "baseSha": "2330cc81a2a889ab334597c631d19830a9c8313d",
+  "branch": "infra/retire-retirement-test-isolation-20261128",
+  "state": "MERGED",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {
