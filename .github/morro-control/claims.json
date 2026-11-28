@@ -2,23 +2,6 @@
   "schemaVersion": 1,
   "registryAuthority": "ORCHESTRATOR",
   "claims": {
-    "MD-HOME-SEARCH-RETURN-PROOF-20261127": {
-      "owner": "CHATGPT-PRO-CONTROL",
-      "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
-      "branch": "infra/home-search-return-proof-20261127",
-      "baseSha": "f0147bdbdad00d75eecd53a78b8a13d2fc2da5b9",
-      "paths": [
-        ".morro/changesets/MD-HOME-SEARCH-RETURN-PROOF-20261127.json",
-        "apps/morro-digital-platform/src/home/home-discover-navigation.ts",
-        "apps/morro-digital-platform/src/home/home-discover-navigation.test.ts",
-        "apps/morro-digital-platform/src/ux/home-discover-manual-conformance.test.ts",
-        "apps/morro-digital-platform/tooling/home-discover-manual-conformance.mjs"
-      ],
-      "domains": ["map", "ci-release"],
-      "risk": "P1",
-      "status": "IMPLEMENTING",
-      "expiresAt": "2026-11-28T02:45:25.605Z"
-    },
     "MD-RETIREMENT-TEST-ISOLATION-20261128": {
       "owner": "CHATGPT-PRO-CONTROL",
       "reviewer": "AUTOMATED-INDEPENDENT-PROOF",
