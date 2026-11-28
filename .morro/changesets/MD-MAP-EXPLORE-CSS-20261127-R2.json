@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "MD-MAP-EXPLORE-CSS-20261127-R2",
   "objective": "authorize-explore-locations-css-contract-and-entry-manifest-corrections",
-  "baseSha": "a6cfe7d281b47294c2035b896d108bd49f79d0ed",
+  "baseSha": "ef93c0a2cb851394c42a0e27125aa50b684ea5c5",
   "branch": "infra/acquire-map-explore-css-20261127-r2",
-  "state": "IMPLEMENTING",
+  "state": "LOCAL_PROVEN",
   "risk": "high",
   "scope": "PLATFORM",
   "owns": {
