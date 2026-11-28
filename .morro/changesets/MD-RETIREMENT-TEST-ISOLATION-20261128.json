@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 2,
+  "id": "MD-RETIREMENT-TEST-ISOLATION-20261128",
+  "objective": "isolate-retirement-transport-tests-from-inherited-environment",
+  "baseSha": "18937c73eb1cebe82aee042065691d64b406c452",
+  "branch": "infra/acquire-retirement-test-isolation-20261128",
+  "state": "IMPLEMENTING",
+  "risk": "high",
+  "scope": "PLATFORM",
+  "owns": {
+    "paths": [
+      ".morro/changesets/MD-RETIREMENT-TEST-ISOLATION-20261128.json",
+      "tooling/fabric/claim-retirement-proof.test.mjs"
+    ],
+    "contracts": []
+  },
+  "reads": {
+    "contracts": []
+  },
+  "produces": {
+    "events": [],
+    "routes": []
+  },
+  "database": {
+    "tables": []
+  },
+  "auth": {
+    "capabilities": []
+  },
+  "dependencies": [],
+  "requiredEvidence": [
+    "format",
+    "secrets",
+    "lint",
+    "typecheck",
+    "affected-tests",
+    "build",
+    "integration",
+    "automated-independent-proof",
+    "exact-head-identity"
+  ],
+  "requiredCapabilities": [
+    "github:read",
+    "workspace:write:claimed-paths",
+    "evidence:write:task-local"
+  ],
+  "contextPack": {
+    "maxBytes": 65536,
+    "include": ["changeset", "git-identity", "ownership", "proof-plan"]
+  },
+  "proof": {
+    "budget": {
+      "maxCommands": 1,
+      "maxSeconds": 300
+    },
+    "commands": [
+      {
+        "id": "claim-retirement-proof-contract",
+        "argv": [
+          "node",
+          "--test",
+          "tooling/fabric/claim-retirement-proof.test.mjs"
+        ],
+        "timeoutSeconds": 300
+      }
+    ],
+    "requiredRemoteEvidence": [
+      "automated-independent-proof",
+      "exact-head-identity"
+    ]
+  },
+  "stopAt": "REMOTE_PROVEN"
+}
