@@ -37,7 +37,16 @@ import {
 const BASE = "a".repeat(40);
 const MERGE = "b".repeat(40);
 
-test("retirement CLI transport is explicit and performs bounded GitHub GET only", async () => {
+test("retirement CLI transport is explicit and performs bounded GitHub GET only", async (t) => {
+  const inheritedTransport = process.env.TDP_RETIREMENT_GITHUB_TRANSPORT;
+  t.after(() => {
+    if (inheritedTransport === undefined) {
+      delete process.env.TDP_RETIREMENT_GITHUB_TRANSPORT;
+    } else {
+      process.env.TDP_RETIREMENT_GITHUB_TRANSPORT = inheritedTransport;
+    }
+  });
+  delete process.env.TDP_RETIREMENT_GITHUB_TRANSPORT;
   let calls = 0;
   const runCli = (command, args, options) => {
     calls++;
@@ -71,6 +80,21 @@ test("retirement CLI transport is explicit and performs bounded GitHub GET only"
     [{ number: 1 }],
   );
   assert.equal(calls, 1);
+
+  process.env.TDP_RETIREMENT_GITHUB_TRANSPORT = "gh";
+  await assert.rejects(
+    githubJson("/repos/owner/repo/pulls?state=all", {
+      transport: null,
+      runCli,
+    }),
+    /GITHUB_TOKEN_REQUIRED/u,
+  );
+  assert.equal(calls, 1);
+  assert.deepEqual(
+    await githubJson("/repos/owner/repo/pulls?state=all", { runCli }),
+    [{ number: 1 }],
+  );
+  assert.equal(calls, 2);
 });
 
 test("retirement CLI rejects host redirection and suppresses command error details", async () => {
